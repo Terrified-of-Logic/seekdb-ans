@@ -140,6 +140,14 @@ private:
                             common::ObArray<TableItem*> &table_item_list);
 
   int transform_exprs(ObDMLStmt *stmt, bool &trans_happened);
+
+  // Constant-fold TOKENIZE() over literal arguments once while planning so that
+  // a cached plan for a repeated literal statement does not re-run the tokenizer.
+  int fold_const_tokenize_exprs(ObDMLStmt *stmt, bool &trans_happened);
+
+  int fold_const_tokenize_expr(ObRawExprFactory &expr_factory,
+                               ObRawExpr *&expr,
+                               bool &folded);
   int transform_for_nested_aggregate(ObDMLStmt *&stmt, bool &trans_happened);
   int generate_child_level_aggr_stmt(ObSelectStmt *stmt, ObSelectStmt *&sub_stmt);
   int get_inner_aggr_exprs(ObSelectStmt *sub_stmt, common::ObIArray<ObAggFunRawExpr*>& inner_aggr_exprs);
@@ -375,7 +383,8 @@ private:
   int check_exec_param_correlated(const ObRawExpr *expr, bool &is_correlated);
   int check_is_correlated_cte(ObSelectStmt *stmt, ObIArray<ObSelectStmt *> &visited_cte, bool &is_correlated);
   int convert_join_preds_vector_to_scalar(JoinedTable &joined_table, bool &trans_happened);
-  int preserve_order_for_fulltext_search(ObDMLStmt *stmt, bool& trans_happened);
+  int preserve_order_for_fulltext_search(const ObIArray<ObParentDMLStmt> &parents,
+                                        ObDMLStmt *stmt, bool& trans_happened);
 
   int flatten_conditions(ObDMLStmt *stmt, bool &trans_happened);
   int recursive_flatten_join_conditions(ObDMLStmt *stmt, TableItem *table, bool &trans_happened);

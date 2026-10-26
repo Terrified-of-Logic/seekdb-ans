@@ -53,6 +53,11 @@ public:
   static int detect_batch_size(
       const ObLogPlan &log_plan, int64_t &batch_size);
 
+  // FTS aux build plans get the full rowset batch so one document's word rows fit
+  // into one batch (the scan and the insert operator must agree on the capacity).
+  static int adjust_fts_ddl_batch_size(
+      const ObLogPlan &log_plan, int64_t &batch_size);
+
 private:
   //Generate expression
   //@param [in]  log_plan logical execution plan

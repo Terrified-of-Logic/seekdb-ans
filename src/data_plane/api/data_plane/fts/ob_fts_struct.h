@@ -51,7 +51,10 @@ private:
   ObObjMeta meta_;
 };
 
-typedef common::hash::ObHashMap<ObFTWord, int64_t> ObFTWordMap;
+// Every user of this map is a temporary owned by a single call frame (tokenize expression,
+// DAS domain word counting, query token map of one retrieval iterator, join order estimation and
+// index build word rows), so the per-bucket latches of the hash map are pure overhead here.
+typedef common::hash::ObHashMap<ObFTWord, int64_t, common::hash::NoPthreadDefendMode> ObFTWordMap;
 
 class ObAddWordFlag final
 {

@@ -96,7 +96,8 @@ void ObTextRetrievalTokenIter::reset()
 
 void ObTextRetrievalTokenIter::reuse()
 {
-  if (inv_idx_agg_cache_mode_ && !inv_idx_agg_param_->need_switch_param_) {
+  if (need_calc_relevance() && inv_idx_agg_cache_mode_
+      && !inv_idx_agg_param_->need_switch_param_) {
     // do nothing
   } else {
     token_doc_cnt_calculated_ = false;
@@ -203,7 +204,8 @@ int ObTextRetrievalTokenIter::get_next_row()
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-  } else if (!token_doc_cnt_calculated_ && OB_FAIL(estimate_token_doc_cnt())) {
+  } else if (need_calc_relevance() && !token_doc_cnt_calculated_
+             && OB_FAIL(estimate_token_doc_cnt())) {
   } else if (OB_FAIL(query::das_scan_next_row(inv_idx_scan_iter_))) {
     if (OB_UNLIKELY(OB_ITER_END != ret)) {
     }
@@ -242,7 +244,8 @@ int ObTextRetrievalTokenIter::get_next_batch(const int64_t capacity, int64_t &co
   count = 0;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-  } else if (!token_doc_cnt_calculated_ && OB_FAIL(estimate_token_doc_cnt())) {
+  } else if (need_calc_relevance() && !token_doc_cnt_calculated_
+             && OB_FAIL(estimate_token_doc_cnt())) {
   } else if (OB_FAIL(query::das_scan_next_rows(
                  inv_idx_scan_iter_, count, OB_MIN(max_batch_size_, capacity)))) {
     if (OB_UNLIKELY(OB_ITER_END != ret)) {
@@ -302,10 +305,11 @@ int ObTextRetrievalTokenIter::advance_to(const ObDatum &id_datum)
 int ObTextRetrievalTokenIter::update_scan_param(const ObString &token, common::ObArenaAllocator &allocator)
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(inv_idx_agg_param_->key_ranges_.count() != 1)) {
+  ObTableScanParam *range_param = need_inv_idx_agg() ? inv_idx_agg_param_ : inv_idx_scan_param_;
+  if (OB_ISNULL(range_param) || OB_UNLIKELY(range_param->key_ranges_.count() != 1)) {
     ret = OB_ERR_UNEXPECTED;
   } else {
-    ObNewRange scan_range = inv_idx_agg_param_->key_ranges_.at(0);
+    ObNewRange scan_range = range_param->key_ranges_.at(0);
     ObObj tmp_obj;
     tmp_obj.set_string(ObVarcharType, token);
     tmp_obj.set_meta_type(scan_range.start_key_.get_obj_ptr()->meta_);
@@ -412,6 +416,7 @@ ObTextRetrievalDaaTTokenIter::ObTextRetrievalDaaTTokenIter()
     count_(0),
     relevance_(),
     doc_id_(),
+    id_keys_(nullptr),
     cmp_func_(nullptr),
     is_inited_(false)
 {
@@ -463,6 +468,7 @@ void ObTextRetrievalDaaTTokenIter::reset()
 {
   relevance_.reset();
   doc_id_.reset();
+  id_keys_ = nullptr;
   token_iter_->reset();
   cur_idx_ = -1;
   count_ = 0;
@@ -526,7 +532,7 @@ int ObTextRetrievalDaaTTokenIter::save_docids()
     cur_idx_ = 0;
     const ObDatumVector &doc_id_datum = inv_scan_domain_id_col_->locate_expr_datumvector(*eval_ctx_);
     for (int64_t i = 0; OB_SUCC(ret) && i < count_; ++i) {
-      if (OB_LIKELY(!token_iter_->get_skip()->at(i))) {
+      if (OB_ISNULL(token_iter_->get_skip()) || OB_LIKELY(!token_iter_->get_skip()->at(i))) {
         if (OB_FAIL(doc_id_[i].from_datum(*doc_id_datum.at(i)))) {
         };
       }
@@ -580,6 +586,7 @@ int ObTextRetrievalDaaTTokenIter::advance_to(const ObDatum &id_datum)
 int ObTextRetrievalDaaTTokenIter::get_curr_score(double &score) const
 {
   int ret = OB_SUCCESS;
+  score = 0.0;
   if (OB_UNLIKELY(cur_idx_ >= count_)) {
     ret = OB_ARRAY_OUT_OF_RANGE;
   } else if (relevance_expr_) {
@@ -595,6 +602,69 @@ int ObTextRetrievalDaaTTokenIter::get_curr_id(const ObDatum *&id_datum) const
     ret = OB_ARRAY_OUT_OF_RANGE;
   } else {
     id_datum = &doc_id_[cur_idx_].get_datum();
+  }
+  return ret;
+}
+
+int ObTextRetrievalDaaTTokenIter::get_next_id_key_batch(const ObTextDocIdKey *&keys, int64_t &count)
+{
+  int ret = OB_SUCCESS;
+  int64_t raw_count = 0;
+  const bool is_uint_id = common::ObUInt64Type == inv_scan_domain_id_col_->datum_meta_.type_;
+  keys = nullptr;
+  count = 0;
+  if (IS_NOT_INIT) {
+    ret = OB_NOT_INIT;
+  } else if (OB_UNLIKELY(!eval_ctx_->is_vectorized()
+             || !ObTextDocIdKey::is_supported(inv_scan_domain_id_col_->datum_meta_))) {
+    // only the vectorized unsigned integer and 16 byte binary document id layouts are handled
+    ret = OB_NOT_SUPPORTED;
+  } else if (OB_ISNULL(id_keys_) && OB_ISNULL(id_keys_ = static_cast<ObTextDocIdKey *>(
+                 allocator_->alloc(sizeof(ObTextDocIdKey) * max_batch_size_)))) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+  }
+  while (OB_SUCC(ret) && 0 == count) {
+    if (OB_FAIL(token_iter_->get_next_batch(max_batch_size_, raw_count))) {
+      if (OB_UNLIKELY(OB_ITER_END != ret)) {
+        LOG_WARN("failed to fetch inverted index rows", K(ret), K(max_batch_size_));
+      }
+    } else {
+      // The document id datum vector is shared by all token scans of the query, so the batch
+      // has to be copied out before another token moves the underlying scan.
+      const ObDatumVector &id_datums = inv_scan_domain_id_col_->locate_expr_datumvector(*eval_ctx_);
+      const sql::ObBitVector *skip = token_iter_->get_skip();
+      for (int64_t i = 0; OB_SUCC(ret) && i < raw_count; ++i) {
+        if (OB_NOT_NULL(skip) && skip->at(i)) {
+          // filtered out by the relevance expression, not a result of this posting list
+        } else if (OB_UNLIKELY(nullptr == id_datums.at(i))) {
+          ret = OB_ERR_UNEXPECTED;
+        } else if (is_uint_id) {
+          id_keys_[count].hi_ = 0;
+          id_keys_[count].lo_ = id_datums.at(i)->get_uint64();
+          ++count;
+        } else if (OB_UNLIKELY(ObTextDocIdKey::BINARY_ID_LEN != id_datums.at(i)->len_)) {
+          // the document id column of a heap table is a fixed 16 byte value
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("unexpected binary document id length", K(ret), K(id_datums.at(i)->len_));
+        } else {
+          // big endian halves, so that the integer pair keeps the binary order of the doc ids
+          uint64_t hi = 0;
+          uint64_t lo = 0;
+          MEMCPY(&hi, id_datums.at(i)->ptr_, sizeof(uint64_t));
+          MEMCPY(&lo, id_datums.at(i)->ptr_ + sizeof(uint64_t), sizeof(uint64_t));
+#if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
+          hi = __builtin_bswap64(hi);
+          lo = __builtin_bswap64(lo);
+#endif
+          id_keys_[count].hi_ = hi;
+          id_keys_[count].lo_ = lo;
+          ++count;
+        }
+      }
+    }
+  }
+  if (OB_SUCC(ret) && count > 0) {
+    keys = id_keys_;
   }
   return ret;
 }

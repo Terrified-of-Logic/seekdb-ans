@@ -551,7 +551,14 @@ int ObCharset::strcmp(ObCollationType collation_type,
                       int64_t str2_len)
 {
   int result = 0;
-  if (is_argument_valid(collation_type, str1, str1_len, str2, str2_len)) {
+  // Fulltext index building compares the very same word against itself many
+  // times; byte-identical strings compare equal under every collation, so settle
+  // that case before resolving and walking the collation.
+  if (OB_LIKELY(0 <= str1_len && str1_len == str2_len
+                && (0 == str1_len
+                    || (NULL != str1 && NULL != str2 && 0 == MEMCMP(str1, str2, str1_len))))) {
+    result = 0;
+  } else if (is_argument_valid(collation_type, str1, str1_len, str2, str2_len)) {
     const ObCharsetInfo *cs = get_charset(collation_type);
     const bool t_is_prefix = false;
     result = cs->coll->strnncoll(cs,
@@ -571,7 +578,13 @@ int ObCharset::strcmpsp(ObCollationType collation_type,
                         bool cmp_endspace)
 {
   int result = 0;
-  if (is_argument_valid(collation_type, str1, str1_len, str2, str2_len)) {
+  // Same reasoning as ObCharset::strcmp: identical bytes compare equal whatever
+  // the end space rule is, and sort keys repeat heavily during index building.
+  if (OB_LIKELY(0 <= str1_len && str1_len == str2_len
+                && (0 == str1_len
+                    || (NULL != str1 && NULL != str2 && 0 == MEMCMP(str1, str2, str1_len))))) {
+    result = 0;
+  } else if (is_argument_valid(collation_type, str1, str1_len, str2, str2_len)) {
     const ObCharsetInfo *cs = get_charset(collation_type);
     result = cs->coll->strnncollsp(cs,
                                 reinterpret_cast<const unsigned char *>(str1),
@@ -1719,29 +1732,47 @@ int ObCharset::first_valid_char(
     int64_t &char_len)
 {
   int ret = OB_SUCCESS;
+  const ObCharsetInfo *cs = NULL;
   if (OB_UNLIKELY(collation_type <= CS_TYPE_INVALID ||
                   collation_type >= CS_TYPE_MAX)) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (OB_ISNULL(get_charset(collation_type))) {
+  } else if (OB_ISNULL(cs = get_charset(collation_type))) {
+    ret = OB_NOT_SUPPORTED;
+  } else {
+    ret = first_valid_char(cs, buf, buf_size, char_len);
+  }
+  return ret;
+}
+
+int ObCharset::first_valid_char(
+    const ObCharsetInfo *cs,
+    const char *buf,
+    const int64_t buf_size,
+    int64_t &char_len)
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(cs)) {
     ret = OB_NOT_SUPPORTED;
   } else if (OB_UNLIKELY(NULL == buf)) {
     ret = OB_NOT_INIT;
   } else if (buf_size <= 0) {
     char_len = 0;
+  } else if (OB_ISNULL(cs->cset)) {
+    ret = OB_ERR_UNEXPECTED;
+  } else if (OB_LIKELY(1 == cs->mbminlen
+                       && static_cast<unsigned char>(buf[0]) < 0x80)) {
+    // ASCII is one complete character in every 1-min-byte charset, while the
+    // generic well_formed_len() below walks the multibyte decoder per call.
+    char_len = 1;
   } else {
     int error = 0;
-    int64_t len = 0;
-    const ObCharsetInfo *cs = get_charset(collation_type);
-    if (OB_ISNULL(cs->cset)) {
-      ret = OB_ERR_UNEXPECTED;
+    const int64_t len = static_cast<int64_t>(
+        cs->cset->well_formed_len(cs, buf, buf + buf_size, 1, &error));
+    if (OB_LIKELY(0 == error)) {
+      char_len = len;
     } else {
-      len = static_cast<int64_t>(cs->cset->well_formed_len(cs, buf, buf + buf_size, 1, &error));
-      if (OB_LIKELY(0 == error)) {
-        char_len = len;
-      } else {
-        ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("invalid encoding found");
-      }
+      ret = OB_INVALID_ARGUMENT;
+      LOG_WARN("invalid encoding found");
     }
   }
   return ret;

@@ -20,6 +20,9 @@
 #include "sql/code_generator/ob_code_generator.h"
 #include "sql/code_generator/ob_static_engine_cg.h"
 #include "sql/engine/ob_physical_plan.h"
+#include "sql/optimizer/ob_optimizer_context.h"
+#include "sql/resolver/dml/ob_insert_stmt.h"
+#include "share/schema/ob_table_schema.h"
 
 namespace oceanbase
 {
@@ -32,6 +35,7 @@ int ObCodeGenerator::generate(const ObLogPlan &log_plan,
   int ret = OB_SUCCESS;
   int64_t batch_size = 0;
   OZ(detect_batch_size(log_plan, batch_size));
+  OZ(adjust_fts_ddl_batch_size(log_plan, batch_size));
   if (OB_SUCC(ret) && batch_size > 0) {
     log_plan.get_optimizer_context().set_batch_size(batch_size);
     phy_plan.set_batch_size(batch_size);
@@ -79,6 +83,37 @@ int ObCodeGenerator::generate_operators(const ObLogPlan &log_plan,
   int ret = OB_SUCCESS;
   ObStaticEngineCG static_engin_cg;
   if (OB_FAIL(static_engin_cg.generate(log_plan, phy_plan))) {
+  }
+  return ret;
+}
+
+// The FTS aux table build is an INSERT..SELECT whose source table scan produces one
+// batch per source document (all word rows of that document). The generic small-scan
+// detection clamps such a plan to 16 rows, which splits a typical document into
+// several batches and re-evaluates the pass-through columns per chunk. Raise the
+// batch for the whole plan (not only the scan) so the scan and the insert operator
+// agree on the capacity and 256-row batches stay safe.
+int ObCodeGenerator::adjust_fts_ddl_batch_size(const ObLogPlan &log_plan, int64_t &batch_size)
+{
+  int ret = OB_SUCCESS;
+  ObOptimizerContext &opt_ctx = log_plan.get_optimizer_context();
+  ObExecContext *exec_ctx = opt_ctx.get_exec_ctx();
+  const ObDMLStmt *stmt = log_plan.get_stmt();
+  const TableItem *insert_table_item = NULL;
+  const share::schema::ObTableSchema *ddl_table_schema = NULL;
+  if (OB_ISNULL(stmt) || OB_ISNULL(exec_ctx) || OB_ISNULL(exec_ctx->get_sql_ctx())
+      || OB_ISNULL(exec_ctx->get_sql_ctx()->schema_guard_)) {
+    ret = OB_ERR_UNEXPECTED;
+  } else if (!opt_ctx.is_insert_stmt_in_online_ddl() || !stmt->is_insert_stmt()) {
+    // not an online-DDL insert, keep the detected batch size
+  } else if (OB_ISNULL(insert_table_item = stmt->get_table_item(0))) {
+    ret = OB_ERR_UNEXPECTED;
+  } else if (OB_FAIL(exec_ctx->get_sql_ctx()->schema_guard_->get_table_schema(
+                       insert_table_item->ddl_table_id_, ddl_table_schema))) {
+  } else if (OB_NOT_NULL(ddl_table_schema)
+             && (ddl_table_schema->is_fts_index_aux()
+                 || ddl_table_schema->is_fts_doc_word_aux())) {
+    batch_size = config::_rowsets_max_rows();
   }
   return ret;
 }
