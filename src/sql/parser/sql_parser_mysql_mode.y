@@ -285,7 +285,7 @@ END_P SET_VAR DELIMITER
         ERROR_CODE ERROR_P ERRORS ESCAPE EXCHANGE EXCLUDING EXECUTE EXPANSION EXPORT OUTLINE
         EXTENDED EXCLUSIVE EXTENDED_NOADDR EXTENT_SIZE EXTRACT EXCEPT EXPIRED ENCODING EMPTY_FIELD_AS_NULL EUCLIDEAN
 
-        FAIL FAILOVER FAST FAULTS FIELDS FILEX FIRST FIRST_VALUE FIXED FLUSH FORMAT
+        FAIL FAILOVER FAST FAULTS FIELDS FILEX FILE_SCAN FILE_LIST FILE_SCHEMA FIRST FIRST_VALUE FIXED FLUSH FORMAT
         FOUND FORK FREEZE FREQUENCY FUNCTION FOLLOWING FLASHBACK FULL FRAGMENTATION FROZEN FILE_ID FILTER
         FIELD_OPTIONALLY_ENCLOSED_BY FIELD_DELIMITER FIELD_ENCLOSED_BY FILE_EXTENSION
 
@@ -512,6 +512,7 @@ END_P SET_VAR DELIMITER
 %type <node> column_list_with_boost with_param_column_ref
 %type <node> es_sql_opt
 %type <node> hybrid_search_expr hybrid_search_param
+%type <node> file_scan_expr file_list_expr file_schema_expr
 %type <node> vector_similarity_expr vector_similarity_metric
 %type <node> algorithm_opt lock_opt
 %type <node> flush_privileges_stmt opt_flush_privileges_scope
@@ -10904,6 +10905,18 @@ tbl_name
 {
   $$ = $1;
 }
+| file_scan_expr
+{
+  $$ = $1;
+}
+| file_list_expr
+{
+  $$ = $1;
+}
+| file_schema_expr
+{
+  $$ = $1;
+}
 ;
 
 tbl_name:
@@ -17552,6 +17565,63 @@ literal
 }
 ;
 
+file_scan_expr:
+FILE_SCAN '(' literal ')'
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_FILE_SCAN_TABLE, 3, $3, NULL, NULL);
+}
+| FILE_SCAN '(' literal ')' relation_name
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_FILE_SCAN_TABLE, 3, $3, NULL, $5);
+}
+| FILE_SCAN '(' literal ')' AS relation_name
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_FILE_SCAN_TABLE, 3, $3, NULL, $6);
+}
+| FILE_SCAN '(' literal ',' literal ')'
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_FILE_SCAN_TABLE, 3, $3, $5, NULL);
+}
+| FILE_SCAN '(' literal ',' literal ')' relation_name
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_FILE_SCAN_TABLE, 3, $3, $5, $7);
+}
+| FILE_SCAN '(' literal ',' literal ')' AS relation_name
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_FILE_SCAN_TABLE, 3, $3, $5, $8);
+}
+;
+
+file_list_expr:
+FILE_LIST '(' literal ')'
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_FILE_LIST_TABLE, 2, $3, NULL);
+}
+| FILE_LIST '(' literal ')' relation_name
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_FILE_LIST_TABLE, 2, $3, $5);
+}
+| FILE_LIST '(' literal ')' AS relation_name
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_FILE_LIST_TABLE, 2, $3, $6);
+}
+;
+
+file_schema_expr:
+FILE_SCHEMA '(' literal ')'
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_FILE_SCHEMA_TABLE, 2, $3, NULL);
+}
+| FILE_SCHEMA '(' literal ')' relation_name
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_FILE_SCHEMA_TABLE, 2, $3, $5);
+}
+| FILE_SCHEMA '(' literal ')' AS relation_name
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_FILE_SCHEMA_TABLE, 2, $3, $6);
+}
+;
+
 unreserved_keyword:
 unreserved_keyword_for_role_name { $$=$1;}
 | unreserved_keyword_ambiguous_roles { $$=$1;}
@@ -18255,6 +18325,9 @@ ACCOUNT
 |       INCONSISTENT 
 |       INDIVIDUAL
 |       HYBRID_SEARCH
+|       FILE_SCAN
+|       FILE_LIST
+|       FILE_SCHEMA
 ;
 
 unreserved_keyword_special:
