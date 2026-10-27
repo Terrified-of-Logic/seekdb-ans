@@ -179,7 +179,7 @@ int ObTransformPreProcess::transform_one_stmt(common::ObIArray<ObParentDMLStmt> 
     }
     if (OB_SUCC(ret)) {
       if (stmt->get_match_exprs().count() > 0 &&
-          OB_FAIL(preserve_order_for_fulltext_search(stmt, is_happened))) {
+          OB_FAIL(preserve_order_for_fulltext_search(parent_stmts, stmt, is_happened))) {
       } else {
         trans_happened |= is_happened;
       }
@@ -3790,7 +3790,51 @@ int ObTransformPreProcess::do_flatten_conditions(ObDMLStmt *stmt, ObIArray<ObRaw
 
 // full-text index queries on a single base table are processed with order preservation. 
 // (Order is not preserved in multi-table join scenarios.)
-int ObTransformPreProcess::preserve_order_for_fulltext_search(ObDMLStmt *stmt, bool& trans_happened)
+// A direct COUNT(*) consumer cannot observe either the order or values of a
+// simple view. Keep DISTINCT, aggregates, side effects and column consumers
+// out of this rule: their cardinality or result can depend on those values.
+static bool fts_view_only_counts_rows(const ObIArray<ObParentDMLStmt> &parents,
+                                     const ObDMLStmt *stmt)
+{
+  bool eligible = false;
+  if (!parents.empty() && OB_NOT_NULL(stmt) && stmt->is_select_stmt()
+      && OB_NOT_NULL(parents.at(parents.count()-1).stmt_)
+      && parents.at(parents.count()-1).stmt_->is_select_stmt()) {
+    const ObSelectStmt *parent = static_cast<const ObSelectStmt *>(parents.at(parents.count()-1).stmt_);
+    const ObSelectStmt *view = static_cast<const ObSelectStmt *>(stmt);
+    const TableItem *item = parent->get_table_items().count() == 1 ? parent->get_table_item(0) : nullptr;
+    eligible = OB_NOT_NULL(item) && item->is_generated_table() && item->ref_query_ == view
+        && parent->get_from_item_size() == 1 && parent->get_column_size(item->table_id_) == 0
+        && parent->get_select_item_size() == 1 && parent->get_aggr_item_size() == 1
+        && OB_NOT_NULL(parent->get_aggr_item(0))
+        && parent->get_aggr_item(0)->get_expr_type() == T_FUN_COUNT
+        && parent->get_aggr_item(0)->get_real_param_count() == 0
+        && parent->get_select_item(0).expr_ == parent->get_aggr_item(0)
+        && !parent->is_set_stmt() && !parent->has_distinct() && parent->get_group_expr_size() == 0
+        && !parent->has_rollup() && parent->get_having_exprs().empty()
+        && parent->get_condition_exprs().empty() && parent->get_semi_infos().empty()
+        && !parent->has_window_function() && parent->get_qualify_filters().empty()
+        && !parent->has_order_by() && !parent->has_limit() && !parent->has_for_update()
+        && !parent->is_calc_found_rows() && !parent->is_contains_assignment()
+        && parent->get_subquery_exprs().empty() && parent->get_CTE_table_size() == 0
+        && !view->is_set_stmt() && !view->has_distinct() && !view->has_group_by()
+        && !view->has_rollup() && view->get_aggr_item_size() == 0
+        && view->get_having_exprs().empty() && !view->has_window_function()
+        && view->get_qualify_filters().empty() && !view->has_order_by()
+        && !view->has_for_update() && !view->is_calc_found_rows()
+        && !view->is_fetch_with_ties() && OB_ISNULL(view->get_limit_percent_expr())
+        && !view->is_contains_assignment() && view->get_subquery_exprs().empty()
+        && view->get_CTE_table_size() == 0 && view->get_table_items().count() == 1;
+    for (int64_t i = 0; eligible && i < view->get_select_item_size(); ++i) {
+      const ObRawExpr *expr = view->get_select_item(i).expr_;
+      eligible = OB_NOT_NULL(expr) && (expr->is_column_ref_expr() || expr->is_const_expr());
+    }
+  }
+  return eligible;
+}
+
+int ObTransformPreProcess::preserve_order_for_fulltext_search(
+    const ObIArray<ObParentDMLStmt> &parents, ObDMLStmt *stmt, bool& trans_happened)
 {
   int ret = OB_SUCCESS;
   trans_happened = false;
@@ -3798,6 +3842,16 @@ int ObTransformPreProcess::preserve_order_for_fulltext_search(ObDMLStmt *stmt, b
   ObRawExpr *match_expr = nullptr;
   if (OB_ISNULL(stmt)) {
     ret = OB_ERR_UNEXPECTED;
+  } else if (fts_view_only_counts_rows(parents, stmt)) {
+    ObSelectStmt *view = static_cast<ObSelectStmt *>(stmt);
+    ObConstRawExpr *one = nullptr;
+    if (OB_FAIL(ObRawExprUtils::build_const_int_expr(*ctx_->expr_factory_, ObIntType, 1, one))) {
+    } else {
+      for (int64_t i = 0; i < view->get_select_item_size(); ++i) {
+        view->get_select_item(i).expr_ = one;
+      }
+      trans_happened = true;
+    }
   } else if (stmt->get_table_items().count() != 1 || stmt->get_order_item_size() != 0) {
     // do nothing
   } else if (stmt->is_select_stmt() && 

@@ -49,6 +49,7 @@
 #include "sql/resolver/ddl/ob_fts_index_builder_util.h"
 #include "sql/optimizer/ob_log_insert.h"
 #include "sql/ob_sql_trans_control.h"
+#include "sql/resolver/dml/ob_stmt_expr_visitor.h"
 
 using namespace oceanbase;
 using namespace sql;
@@ -11987,6 +11988,48 @@ int ObLogPlan::construct_startup_filter_for_limit(ObRawExpr *limit_expr, ObLogic
   return ret;
 }
 
+// Only an index-driven, bare natural-language predicate can imply a match.
+// Functional lookup and all observable score uses retain the scoring path.
+static int fts_can_skip_score(const ObDMLStmt *stmt,
+                             const ObRawExpr *predicate,
+                             const ObMatchFunRawExpr *match,
+                             bool &can_skip)
+{
+  int ret = OB_SUCCESS;
+  can_skip = false;
+  if (OB_ISNULL(stmt) || OB_ISNULL(predicate) || OB_ISNULL(match)) {
+    ret = OB_ERR_UNEXPECTED;
+  } else if (!stmt->is_select_stmt() || match->is_es_match()
+             || NATURAL_LANGUAGE_MODE != match->get_mode_flag()
+             || !stmt->get_subquery_exprs().empty()
+             || !stmt->get_joined_tables().empty()
+             || T_OP_BOOL != predicate->get_expr_type()
+             || 1 != predicate->get_param_count()
+             || predicate->get_param_expr(0) != match) {
+    // Keep scores for every shape whose truth-only use is not proven here.
+  } else {
+    ObSEArray<ObRawExpr *, 16> expressions;
+    ObStmtExprGetter visitor;
+    visitor.set_relation_scope();
+    visitor.remove_scope(SCOPE_WHERE);
+    if (OB_FAIL(stmt->get_relation_exprs(expressions, visitor))) {
+    } else {
+      can_skip = true;
+      for (int64_t i = 0; can_skip && i < expressions.count(); ++i) {
+        can_skip = OB_NOT_NULL(expressions.at(i))
+            && !expressions.at(i)->has_flag(CNT_MATCH_EXPR);
+      }
+      const ObIArray<ObRawExpr *> &conditions = stmt->get_condition_exprs();
+      for (int64_t i = 0; can_skip && i < conditions.count(); ++i) {
+        const ObRawExpr *condition = conditions.at(i);
+        can_skip = OB_NOT_NULL(condition)
+            && (condition == predicate || !condition->has_flag(CNT_MATCH_EXPR));
+      }
+    }
+  }
+  return ret;
+}
+
 int ObLogPlan::prepare_text_retrieval_scan(const ObIArray<ObRawExpr *> &scan_match_exprs,
                                            const ObIArray<ObRawExpr *> &scan_match_filters,
                                            const ObIArray<ObRawExpr *> &all_match_filters,
@@ -11998,6 +12041,7 @@ int ObLogPlan::prepare_text_retrieval_scan(const ObIArray<ObRawExpr *> &scan_mat
   ObRawExpr *match_pred = NULL;
   ObMatchFunRawExpr *match_against = NULL;
   ObMatchFunRawExpr *scan_match_expr = nullptr;
+  bool can_skip_score = false;
 
   if (OB_UNLIKELY(1 != scan_match_exprs.count())) {
     ret = OB_NOT_SUPPORTED;
@@ -12031,6 +12075,7 @@ int ObLogPlan::prepare_text_retrieval_scan(const ObIArray<ObRawExpr *> &scan_mat
   if (OB_FAIL(ret)) {
   } else if (OB_UNLIKELY(match_against != static_cast<ObMatchFunRawExpr *>(scan_match_exprs.at(0)))) {
     ret = OB_ERR_UNEXPECTED;
+  } else if (OB_FAIL(fts_can_skip_score(get_stmt(), match_pred, match_against, can_skip_score))) {
   } else if (OB_FAIL(prepare_text_retrieval_info(table_scan->get_real_ref_table_id(),
                                                  table_scan->get_index_table_id(),
                                                  match_against,
@@ -12038,7 +12083,10 @@ int ObLogPlan::prepare_text_retrieval_scan(const ObIArray<ObRawExpr *> &scan_mat
   } else {
     ObTextRetrievalInfo &tr_info = table_scan->get_text_retrieval_info();
     tr_info.match_expr_ = match_against;
-    tr_info.pushdown_match_filter_ = match_pred;
+    tr_info.need_calc_relevance_ = !can_skip_score;
+    // When relevance is not needed the natural-language predicate is implied
+    // by the scan result, so the per-row MATCH recheck can be dropped too.
+    tr_info.pushdown_match_filter_ = tr_info.need_calc_relevance_ ? match_pred : nullptr;
     // The mapping table is absent when the data-table rowkey is used as the document ID.
     table_scan->set_doc_id_index_table_id(tr_info.doc_id_idx_tid_);
     if (table_scan->is_vec_adaptive_scan() || table_scan->is_vec_idx_scan_post_filter()) {
@@ -12251,18 +12299,6 @@ int ObLogPlan::prepare_text_retrieval_info(const uint64_t ref_table_id,
     }
   }
   if (OB_SUCC(ret)) {
-    /*
-    if (OB_FAIL(ObTransformUtils::check_need_calc_match_score(get_optimizer_context().get_exec_ctx(),
-                                                              get_stmt(),
-                                                              match_against,
-                                                              need_calc_relevance,
-                                                              constraints))) {
-      LOG_WARN("failed to check need calc relevance", K(ret));
-    } else if (!need_calc_relevance &&
-               OB_FAIL(append_array_no_dup(get_optimizer_context().get_query_ctx()->all_expr_constraints_, constraints))) {
-      LOG_WARN("failed to append array no dup", K(ret));
-    }
-    */
     tr_info.match_expr_ = match_against;
     tr_info.inv_idx_tid_ = inv_idx_tid;
     tr_info.fwd_idx_tid_ = fwd_idx_tid;

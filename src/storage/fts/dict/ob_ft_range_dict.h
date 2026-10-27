@@ -39,7 +39,8 @@ public:
                 ObFTCacheRangeContainer *range_container,
                 const ObFTDictDesc &desc)
       : is_inited_(false), desc_(desc), range_alloc_(lib::ObMemAttr("Range Dict")),
-        range_dicts_(&range_alloc_), range_container_(range_container)
+        range_dicts_(&range_alloc_), range_container_(range_container),
+        ranges_ascending_(false)
   {
   }
   ~ObFTRangeDict() override{};
@@ -99,6 +100,12 @@ private:
 
   int find_first_char_range(const ObString &single_word, ObIFTDict *&dict) const;
 
+  // Verify that the ranges are strictly ascending and disjoint, i.e. that at most one
+  // range can contain a word; only then the binary search is equivalent to the linear
+  // scan. It never fails: a dictionary that violates the invariant simply keeps using
+  // the linear scan.
+  void check_ranges_ordered();
+
 private:
   static constexpr int DEFAULT_KEY_PER_RANGE = 50000; // by estimated
   bool is_inited_;
@@ -106,6 +113,8 @@ private:
   ObArenaAllocator range_alloc_;
   ObVector<ObFTRange, ObArenaAllocator> range_dicts_;
   ObFTCacheRangeContainer *range_container_; // only used to read cache
+  // only true when check_ranges_ordered() proved that the binary search is safe
+  bool ranges_ascending_;
 
 private:
   DISALLOW_COPY_AND_ASSIGN(ObFTRangeDict);

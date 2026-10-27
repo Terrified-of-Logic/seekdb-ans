@@ -135,7 +135,8 @@ int ObDASTextRetrievalMergeIter::rescan()
   if (0 == query_tokens_.count()) {
   } else {
     next_written_idx_ = 0;
-    limit_param_ = ir_rtdef_->get_inv_idx_scan_rtdef()->limit_param_;
+    limit_param_ = ir_rtdef_->retrieval_limit_.is_valid()
+        ? ir_rtdef_->retrieval_limit_ : ir_rtdef_->get_inv_idx_scan_rtdef()->limit_param_;
   }
   return ret;
 }
@@ -345,7 +346,8 @@ int ObDASTextRetrievalMergeIter::inner_init(ObDASIterParam &param)
       } else if (OB_FAIL(cache_doc_ids_.init(size))) {
       } else if (OB_FAIL(cache_doc_ids_.prepare_allocate(size))) {
       } else {
-        limit_param_ = ir_rtdef_->get_inv_idx_scan_rtdef()->limit_param_;
+        limit_param_ = ir_rtdef_->retrieval_limit_.is_valid()
+            ? ir_rtdef_->retrieval_limit_ : ir_rtdef_->get_inv_idx_scan_rtdef()->limit_param_;
       }
       if (OB_FAIL(ret)) {
       } else if (force_return_docid_) {

@@ -101,7 +101,17 @@ public:
 
   virtual ~ObIIKProcessor() {}
 
+  // Slow path: read the current character back from the context.
   int process(TokenizeContext &ctx);
+
+  // Fast path: the caller has already decoded the current character.
+  int process(TokenizeContext &ctx,
+              const char *ch,
+              const uint8_t char_len,
+              const ObFTCharUtil::CharType type)
+  {
+    return do_process(ctx, ch, char_len, type);
+  }
 
   virtual int do_process(TokenizeContext &ctx,
                          const char *ch,

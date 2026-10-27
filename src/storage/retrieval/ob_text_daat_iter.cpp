@@ -30,16 +30,22 @@ int ObTextDaaTIter::init(const ObTextDaaTParam &param)
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(ObSRDaaTIterImpl::init(*param.base_param_, *param.dim_iters_,
                                             *param.allocator_, *param.relevance_collector_))) {
-  } else if (OB_FAIL(bm25_param_estimator_.init(param.bm25_param_est_ctx_))) {
+  } else if (param.base_param_->need_calc_relevance()
+             && OB_FAIL(bm25_param_estimator_.init(param.bm25_param_est_ctx_))) {
   } else {
     mode_flag_ = param.mode_flag_;
     function_lookup_mode_ = param.function_lookup_mode_;
+    min_should_match_ = param.min_should_match_;
   }
   return ret;
 }
 
 void ObTextDaaTIter::reset()
 {
+  id_only_state_ = ID_ONLY_UNCHECKED;
+  id_only_cursors_ = nullptr;
+  id_only_ids_ = nullptr;
+  id_only_batch_size_ = 0;
   bm25_param_estimator_.reset();
   // this class can know the type of dim_iters_, but ObSRDaaTIterImpl maybe not
   if (OB_NOT_NULL(dim_iters_)) {
@@ -62,6 +68,7 @@ void ObTextDaaTIter::reuse(const bool switch_tablet)
       static_cast<ObTextRetrievalDaaTTokenIter *>(dim_iters_->at(i))->reuse();
     }
   }
+  reset_id_only_cursors();
   ObSRDaaTIterImpl::reuse(switch_tablet);
 }
 
@@ -73,6 +80,188 @@ int ObTextDaaTIter::pre_process()
   } else if (iter_param_->need_project_relevance()) {
     if (OB_FAIL(bm25_param_estimator_.do_estimation(*iter_param_->eval_ctx_))) {
     }
+  }
+  return ret;
+}
+
+int ObTextDaaTIter::get_next_rows(const int64_t capacity, int64_t &count)
+{
+  int ret = OB_SUCCESS;
+  count = 0;
+  if (IS_NOT_INIT) {
+    ret = OB_NOT_INIT;
+  } else if (OB_ISNULL(iter_param_) || OB_ISNULL(dim_iters_)
+             || OB_ISNULL(iter_param_->limit_param_)) {
+    ret = OB_ERR_UNEXPECTED;
+  } else if (ID_ONLY_UNCHECKED == id_only_state_ && OB_FAIL(check_id_only_mode())) {
+  } else if (OB_UNLIKELY(0 == capacity)) {
+  } else if (iter_param_->limit_param_->is_valid()
+             && output_row_cnt_ >= iter_param_->limit_param_->limit_) {
+    // the limit pushed into the retrieval has already been satisfied
+    ret = OB_ITER_END;
+  } else if (0 == dim_iters_->count()) {
+    ret = OB_ITER_END;
+  } else if (ID_ONLY_ENABLED == id_only_state_) {
+    ret = merge_id_only_rows(capacity, count);
+  } else {
+    ret = ObSRDaaTIterImpl::get_next_rows(capacity, count);
+  }
+  return ret;
+}
+
+// The union fast path is only taken for the plain natural language MATCH predicate, where the
+// matched rows are exactly the union of the posting lists with no observable score, no filter on
+// it and no pushed down topk. Every other shape keeps the generic DaaT implementation.
+int ObTextDaaTIter::check_id_only_mode()
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(iter_param_) || OB_ISNULL(iter_param_->eval_ctx_) || OB_ISNULL(dim_iters_)
+      || OB_ISNULL(iter_param_->id_proj_expr_) || OB_ISNULL(iter_allocator_)) {
+    ret = OB_ERR_UNEXPECTED;
+  } else if (!iter_param_->need_calc_relevance()
+             && !iter_param_->need_project_relevance()
+             && !iter_param_->need_filter()
+             && !iter_param_->need_pushdown_topk()
+             && !function_lookup_mode_
+             && sql::ObMatchAgainstMode::NATURAL_LANGUAGE_MODE == mode_flag_
+             && dim_iters_->count() > 0
+             && iter_param_->eval_ctx_->is_vectorized()
+             && common::ObUInt64Type == iter_param_->id_proj_expr_->datum_meta_.type_) {
+    const int64_t batch_size = OB_MAX(iter_param_->max_batch_size_,
+                                      iter_param_->eval_ctx_->max_batch_size_);
+    if (OB_UNLIKELY(batch_size <= 0)) {
+      ret = OB_ERR_UNEXPECTED;
+    } else if (OB_ISNULL(id_only_cursors_ = static_cast<IdOnlyCursor *>(
+                   iter_allocator_->alloc(sizeof(IdOnlyCursor) * dim_iters_->count())))) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+    } else if (OB_ISNULL(id_only_ids_ = static_cast<uint64_t *>(
+                   iter_allocator_->alloc(sizeof(uint64_t) * batch_size)))) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+    } else {
+      id_only_batch_size_ = batch_size;
+      id_only_state_ = ID_ONLY_ENABLED;
+      reset_id_only_cursors();
+      LOG_DEBUG("score-free MATCH uses the id only union path",
+                K(dim_iters_->count()), K(batch_size), KPC(iter_param_));
+    }
+  } else {
+    id_only_state_ = ID_ONLY_DISABLED;
+  }
+  return ret;
+}
+
+void ObTextDaaTIter::reset_id_only_cursors()
+{
+  if (OB_NOT_NULL(id_only_cursors_) && OB_NOT_NULL(dim_iters_)) {
+    for (int64_t i = 0; i < dim_iters_->count(); ++i) {
+      id_only_cursors_[i].ids_ = nullptr;
+      id_only_cursors_[i].count_ = 0;
+      id_only_cursors_[i].pos_ = 0;
+      id_only_cursors_[i].end_ = false;
+    }
+  }
+}
+
+int ObTextDaaTIter::load_id_only_cursor(const int64_t iter_idx)
+{
+  int ret = OB_SUCCESS;
+  ObTextRetrievalDaaTTokenIter *dim_iter = nullptr;
+  const uint64_t *ids = nullptr;
+  int64_t id_cnt = 0;
+  if (OB_ISNULL(id_only_cursors_) || OB_ISNULL(dim_iters_)
+      || OB_UNLIKELY(iter_idx < 0 || iter_idx >= dim_iters_->count())) {
+    ret = OB_ERR_UNEXPECTED;
+  } else {
+    IdOnlyCursor &cursor = id_only_cursors_[iter_idx];
+    cursor.ids_ = nullptr;
+    cursor.count_ = 0;
+    cursor.pos_ = 0;
+    if (OB_ISNULL(dim_iter = static_cast<ObTextRetrievalDaaTTokenIter *>(dim_iters_->at(iter_idx)))) {
+      ret = OB_ERR_UNEXPECTED;
+    } else if (OB_FAIL(dim_iter->get_next_uint_id_batch(ids, id_cnt))) {
+      if (OB_UNLIKELY(OB_ITER_END != ret)) {
+        LOG_WARN("failed to load posting list document ids", K(ret), K(iter_idx));
+      } else {
+        cursor.end_ = true;
+        ret = OB_SUCCESS;
+      }
+    } else if (OB_UNLIKELY(id_cnt <= 0 || nullptr == ids)) {
+      ret = OB_ERR_UNEXPECTED;
+    } else {
+      cursor.ids_ = ids;
+      cursor.count_ = id_cnt;
+    }
+  }
+  return ret;
+}
+
+int ObTextDaaTIter::merge_id_only_rows(const int64_t capacity, int64_t &count)
+{
+  int ret = OB_SUCCESS;
+  const int64_t dim_cnt = dim_iters_->count();
+  // Same output batch bound as the generic DaaT path, so the projected row indexes stay
+  // inside the datum arrays of the evaluation context.
+  const int64_t batch_size = MIN(capacity, iter_param_->max_batch_size_);
+  const common::ObLimitParam *limit_param = iter_param_->limit_param_;
+  const bool limited = limit_param->is_valid();
+  count = 0;
+  for (int64_t i = 0; OB_SUCC(ret) && i < dim_cnt; ++i) {
+    const IdOnlyCursor &cursor = id_only_cursors_[i];
+    if (!cursor.end_ && cursor.pos_ >= cursor.count_ && OB_FAIL(load_id_only_cursor(i))) {
+    }
+  }
+  while (OB_SUCC(ret) && count < batch_size) {
+    uint64_t min_id = 0;
+    bool found = false;
+    for (int64_t i = 0; i < dim_cnt; ++i) {
+      const IdOnlyCursor &cursor = id_only_cursors_[i];
+      if (!cursor.end_) {
+        const uint64_t id = cursor.ids_[cursor.pos_];
+        if (!found || id < min_id) {
+          min_id = id;
+          found = true;
+        }
+      }
+    }
+    if (OB_UNLIKELY(!found)) {
+      ret = OB_ITER_END;
+    } else {
+      int64_t matched_dim_cnt = 0;
+      for (int64_t i = 0; OB_SUCC(ret) && i < dim_cnt; ++i) {
+        IdOnlyCursor &cursor = id_only_cursors_[i];
+        if (!cursor.end_ && cursor.ids_[cursor.pos_] == min_id) {
+          ++matched_dim_cnt;
+          if (++cursor.pos_ >= cursor.count_ && OB_FAIL(load_id_only_cursor(i))) {
+          }
+        }
+      }
+      if (OB_FAIL(ret)) {
+      } else if (min_should_match_ > 0 && matched_dim_cnt < min_should_match_) {
+        // the same document has to occur in enough posting lists to be a result
+      } else if (FALSE_IT(++input_row_cnt_)) {
+      } else if (limited && input_row_cnt_ <= limit_param->offset_) {
+        // skipped by the offset of the pushed down limit
+      } else {
+        id_only_ids_[count++] = min_id;
+        ++output_row_cnt_;
+        if (limited && output_row_cnt_ >= limit_param->limit_) {
+          ret = OB_ITER_END;
+        }
+      }
+    }
+  }
+  if ((OB_SUCC(ret) || OB_ITER_END == ret) && count > 0) {
+    ObEvalCtx *eval_ctx = iter_param_->eval_ctx_;
+    ObExpr *id_proj_expr = iter_param_->id_proj_expr_;
+    ObEvalCtx::BatchInfoScopeGuard guard(*eval_ctx);
+    sql::ObBitVector &evaluated_flags = id_proj_expr->get_evaluated_flags(*eval_ctx);
+    for (int64_t i = 0; i < count; ++i) {
+      guard.set_batch_idx(i);
+      ObDatum &id_datum = id_proj_expr->locate_datum_for_write(*eval_ctx);
+      id_datum.set_uint(id_only_ids_[i]);
+      evaluated_flags.set(i);
+    }
+    id_proj_expr->set_evaluated_projected(*eval_ctx);
   }
   return ret;
 }
@@ -111,7 +300,8 @@ int ObTextBMWIter::init(const ObTextDaaTParam &param)
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(ObSRBMWIterImpl::init(*param.base_param_, *param.dim_iters_,
                                            *param.allocator_, *param.relevance_collector_))) {
-  } else if (OB_FAIL(bm25_param_estimator_.init(param.bm25_param_est_ctx_))) {
+  } else if (param.base_param_->need_calc_relevance()
+             && OB_FAIL(bm25_param_estimator_.init(param.bm25_param_est_ctx_))) {
   }
   return ret;
 }
@@ -123,7 +313,8 @@ int ObTextBMWIter::get_next_rows(const int64_t capacity, int64_t &count)
     ret = OB_NOT_INIT;
   } else if (dim_iters_->count() == 0) {
     ret = OB_ITER_END;
-  } else if (OB_FAIL(bm25_param_estimator_.do_estimation(*iter_param_->eval_ctx_))) {
+  } else if (iter_param_->need_calc_relevance()
+             && OB_FAIL(bm25_param_estimator_.do_estimation(*iter_param_->eval_ctx_))) {
   }
 
   if (FAILEDx(ObSRBMWIterImpl::get_next_rows(capacity, count))) {
