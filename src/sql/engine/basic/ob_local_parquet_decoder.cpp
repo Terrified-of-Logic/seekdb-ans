@@ -32,7 +32,6 @@
 // implementation from oceanbase/seekdb PR #1251 (commit be9369f); this file
 // has been renamed, reorganized and re-commented.  See
 // docs/file_sql_design.md for the details of the divergence.
-*/
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/engine/basic/ob_local_parquet_decoder.h"
 
@@ -1096,9 +1095,9 @@ int uncompress_page(const int32_t codec, const uint8_t *data, const size_t compr
 class ObLocalParquetDecoder::DecoderState
 {
 public:
-  Impl() : file_fd_(-1), file_bytes_(0), file_path_(), footer_(), columns_(), projected_(),
+  DecoderState() : file_fd_(-1), file_bytes_(0), file_path_(), footer_(), columns_(), projected_(),
            group_cursor_(0), row_cursor_(0), decoded_columns_() {}
-  ~Impl() { close(); }
+  ~DecoderState() { close(); }
   void close()
   {
     if (file_fd_ >= 0) ::close(file_fd_);

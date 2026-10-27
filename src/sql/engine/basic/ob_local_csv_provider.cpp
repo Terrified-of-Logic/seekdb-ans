@@ -104,9 +104,8 @@ int build_csv_header(const std::vector<std::string> &field_names,
     ObLocalColumnSpec column;
     column.source_name_ = source_name;
     column.column_name_ = make_unique_column_name(source_name, static_cast<int64_t>(i), columns);
-    if (OB_FAIL(columns.push_back(column))) {
-      LOG_WARN("failed to append csv column", K(ret), K(i));
-    } else if (columns.size() > static_cast<size_t>(MAX_COLUMN_COUNT)) {
+    columns.push_back(column);
+    if (columns.size() > static_cast<size_t>(MAX_COLUMN_COUNT)) {
       ret = OB_SIZE_OVERFLOW;
       LOG_WARN("too many csv columns", K(ret), K(columns.size()));
     }
@@ -283,15 +282,15 @@ int infer_csv_schema(const std::string &path,
   columns.clear();
   row_count = 0;
   if (OB_FAIL(open_local_stream(path, stream_buffer, stream))) {
-    LOG_WARN("failed to open csv file", K(ret), K(path));
+    LOG_WARN("failed to open csv file", K(ret), KCSTRING(path.c_str()));
   } else {
     bool has_record = false;
     ret = read_csv_record(*stream, header_fields, has_record);
     if (OB_ITER_END == ret) {
       ret = OB_INVALID_DATA;                   // an empty file has no header
-      LOG_WARN("csv file is empty", K(ret), K(path));
+      LOG_WARN("csv file is empty", K(ret), KCSTRING(path.c_str()));
     } else if (OB_FAIL(ret)) {
-      LOG_WARN("failed to read csv header", K(ret), K(path));
+      LOG_WARN("failed to read csv header", K(ret), KCSTRING(path.c_str()));
     } else if (OB_FAIL(build_csv_header(header_fields, columns))) {
       LOG_WARN("failed to build csv columns", K(ret));
     } else if (OB_FAIL(scan_csv_rows(*stream, columns, row_count))) {

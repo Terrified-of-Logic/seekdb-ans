@@ -178,7 +178,7 @@ int infer_jsonl_schema(const std::string &path,
   columns.clear();
   row_count = 0;
   if (OB_FAIL(open_local_stream(path, stream_buffer, stream))) {
-    LOG_WARN("failed to open jsonl file", K(ret), K(path));
+    LOG_WARN("failed to open jsonl file", K(ret), KCSTRING(path.c_str()));
   }
   while (OB_SUCC(ret) && std::getline(*stream, line)) {
     if (line.length() > static_cast<size_t>(MAX_FIELD_BYTES)) {

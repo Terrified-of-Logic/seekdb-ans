@@ -235,7 +235,7 @@ int resolve_path_identity(const std::string &path,
   int ret = OB_SUCCESS;
   struct stat path_stat;
   if (OB_FAIL(ObLocalFileSchema::canonicalize_path(path, canonical_path))) {
-    LOG_WARN("failed to canonicalize local file path", K(ret), K(path));
+    LOG_WARN("failed to canonicalize local file path", K(ret), KCSTRING(path.c_str()));
   } else if (0 != stat(canonical_path.c_str(), &path_stat)) {
     ret = OB_FILE_NOT_OPENED;
   } else if (expect_directory ? !S_ISDIR(path_stat.st_mode) : !S_ISREG(path_stat.st_mode)) {
@@ -426,14 +426,14 @@ int ObLocalFileSchema::infer_schema(const std::string &path,
   bool served_from_cache = false;
   if (OB_FAIL(get_file_fingerprint(path, canonical_path, initial_device, initial_inode,
                                    initial_file_size, initial_modified_time_ns))) {
-    LOG_WARN("failed to fingerprint local file", K(ret), K(path));
+    LOG_WARN("failed to fingerprint local file", K(ret), KCSTRING(path.c_str()));
   } else if (initial_file_size > local_file::MAX_FILE_BYTES) {
     ret = OB_SIZE_OVERFLOW;
     LOG_WARN("local file exceeds the size limit", K(ret),
              K(initial_file_size), K(local_file::MAX_FILE_BYTES));
   } else if (ObLocalFileFormat::AUTO == requested_format
              && OB_FAIL(detect_format(canonical_path, actual_format))) {
-    LOG_WARN("failed to detect local file format", K(ret), K(canonical_path));
+    LOG_WARN("failed to detect local file format", K(ret), KCSTRING(canonical_path.c_str()));
   } else {
     if (ObLocalFileFormat::AUTO != requested_format) {
       actual_format = requested_format;
@@ -463,14 +463,14 @@ int ObLocalFileSchema::infer_schema(const std::string &path,
     // inferred schema would describe a different file than the executor sees.
     if (OB_FAIL(get_file_fingerprint(path, verified_path, verified_device, verified_inode,
                                      file_size, modified_time_ns))) {
-      LOG_WARN("failed to re-fingerprint local file", K(ret), K(path));
+      LOG_WARN("failed to re-fingerprint local file", K(ret), KCSTRING(path.c_str()));
     } else if (verified_path != canonical_path
                || verified_device != initial_device
                || verified_inode != initial_inode
                || file_size != initial_file_size
                || modified_time_ns != initial_modified_time_ns) {
       ret = OB_EAGAIN;
-      LOG_WARN("local file changed while its schema was inferred", K(ret), K(path));
+      LOG_WARN("local file changed while its schema was inferred", K(ret), KCSTRING(path.c_str()));
     } else {
       device = verified_device;
       inode = verified_inode;
@@ -605,14 +605,14 @@ int ObLocalFileReader::open_inner()
                                                       actual_device, actual_inode,
                                                       actual_file_size,
                                                       actual_modified_time_ns))) {
-    LOG_WARN("failed to fingerprint local file before scan", K(ret), K(source_path_));
+    LOG_WARN("failed to fingerprint local file before scan", K(ret), KCSTRING(source_path_.c_str()));
   } else if (actual_path != source_path_
              || (0 != expected_dev_ && actual_device != expected_dev_)
              || (0 != expected_ino_ && actual_inode != expected_ino_)
              || actual_file_size != expected_size_
              || actual_modified_time_ns != expected_mtime_ns_) {
     ret = OB_SCHEMA_EAGAIN;
-    LOG_WARN("local file changed after schema inference", K(ret), K(source_path_));
+    LOG_WARN("local file changed after schema inference", K(ret), KCSTRING(source_path_.c_str()));
   }
   if (OB_SUCC(ret)) {
     if (ObLocalFileFormat::PARQUET == format_) {
@@ -623,7 +623,7 @@ int ObLocalFileReader::open_inner()
                                                 expected_dev_, expected_ino_,
                                                 expected_size_, expected_mtime_ns_,
                                                 projected_))) {
-        LOG_WARN("failed to open parquet decoder", K(ret), K(source_path_));
+        LOG_WARN("failed to open parquet decoder", K(ret), KCSTRING(source_path_.c_str()));
       }
     } else {
       uint64_t opened_device = 0;
@@ -633,7 +633,7 @@ int ObLocalFileReader::open_inner()
       if (OB_FAIL(local_file::open_local_stream(source_path_, stream_buffer_, input_stream_,
                                     &opened_device, &opened_inode,
                                     &opened_size, &opened_mtime_ns))) {
-        LOG_WARN("failed to open local file for scan", K(ret), K(source_path_));
+        LOG_WARN("failed to open local file for scan", K(ret), KCSTRING(source_path_.c_str()));
       } else if ((0 != expected_dev_ && opened_device != expected_dev_)
                  || (0 != expected_ino_ && opened_inode != expected_ino_)
                  || opened_size != expected_size_
@@ -652,7 +652,7 @@ int ObLocalFileReader::open_inner()
     std::vector<std::string> header_fields;
     bool has_record = false;
     if (OB_FAIL(local_file::read_csv_record(*input_stream_, header_fields, has_record))) {
-      LOG_WARN("failed to read the csv header", K(ret), K(source_path_));
+      LOG_WARN("failed to read the csv header", K(ret), KCSTRING(source_path_.c_str()));
     } else if (header_fields.size() != column_specs_.size()) {
       ret = OB_INVALID_DATA;
       LOG_WARN("csv header does not match the resolved columns", K(ret),
@@ -681,7 +681,7 @@ int ObLocalFileReader::verify_end_of_file()
       || actual_size != expected_size_
       || actual_mtime != expected_mtime_ns_) {
     ret = OB_SCHEMA_EAGAIN;
-    LOG_WARN("local file changed while it was being scanned", K(ret), K(source_path_));
+    LOG_WARN("local file changed while it was being scanned", K(ret), KCSTRING(source_path_.c_str()));
   } else {
     end_verified_ = true;
   }
