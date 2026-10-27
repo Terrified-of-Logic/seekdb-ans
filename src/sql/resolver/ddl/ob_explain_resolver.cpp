@@ -21,7 +21,7 @@
 #include "sql/parser/ob_parser.h"
 #include "sql/resolver/dml/ob_select_stmt.h"
 #include "sql/resolver/dml/ob_dml_stmt.h"
-#include "sql/engine/basic/ob_file_scan_utils.h"
+#include "sql/engine/basic/ob_local_file_reader.h"
 #include "sql/engine/cmd/ob_load_data_parser.h"
 #include "lib/string/ob_sql_string.h"
 
@@ -106,12 +106,12 @@ int resolve_describe_column(const ObSelectStmt &select_stmt,
       } else if (table_item->table_id_ != table_id) {
         continue;
       } else {
-        const ObFileTableDef *file_def = table_item->file_table_def_;
+        const ObLocalTableDef *file_def = table_item->file_table_def_;
         for (int64_t j = 0; OB_SUCC(ret) && !found && j < file_def->columns_.count(); ++j) {
-          const ObFileTableColumnDef &file_column = file_def->columns_.at(j);
+          const ObLocalColumnDef &file_column = file_def->columns_.at(j);
           if (ObCharset::case_insensitive_equal(file_column.column_name_, column_name)) {
             type_name = ObString::make_string(
-                ObFileScanUtils::column_type_name(file_column.type_));
+                ObLocalFileSchema::column_type_name(file_column.type_));
             nullable = file_column.nullable_;
             found = true;
           }

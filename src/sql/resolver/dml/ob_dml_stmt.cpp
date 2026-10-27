@@ -90,18 +90,18 @@ bool JoinedTable::same_as(const JoinedTable &other) const
   return bret;
 }
 
-int TableItem::deep_copy_file_table_def(const ObFileTableDef &file_def, ObIAllocator *allocator)
+int TableItem::deep_copy_file_table_def(const ObLocalTableDef &file_def, ObIAllocator *allocator)
 {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(allocator)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("allocator is null when copying file table", K(ret));
-  } else if (OB_ISNULL(file_table_def_ = static_cast<ObFileTableDef *>(
-                         allocator->alloc(sizeof(ObFileTableDef))))) {
+  } else if (OB_ISNULL(file_table_def_ = static_cast<ObLocalTableDef *>(
+                         allocator->alloc(sizeof(ObLocalTableDef))))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("failed to allocate file table def", K(ret));
   } else {
-    file_table_def_ = new (file_table_def_) ObFileTableDef();
+    file_table_def_ = new (file_table_def_) ObLocalTableDef();
     if (OB_FAIL(ob_write_string(*allocator, file_def.canonical_path_, file_table_def_->canonical_path_))) {
       LOG_WARN("failed to copy file path", K(ret));
     } else if (OB_FAIL(ob_write_string(*allocator, file_def.secure_file_priv_, file_table_def_->secure_file_priv_))) {
@@ -114,16 +114,16 @@ int TableItem::deep_copy_file_table_def(const ObFileTableDef &file_def, ObIAlloc
       file_table_def_->inode_ = file_def.inode_;
       file_table_def_->file_size_ = file_def.file_size_;
       file_table_def_->modified_time_ns_ = file_def.modified_time_ns_;
-      const ObIArray<ObFileTableColumnDef> *src_arrays[] = {
+      const ObIArray<ObLocalColumnDef> *src_arrays[] = {
         &file_def.columns_, &file_def.source_columns_
       };
-      ObIArray<ObFileTableColumnDef> *dst_arrays[] = {
+      ObIArray<ObLocalColumnDef> *dst_arrays[] = {
         &file_table_def_->columns_, &file_table_def_->source_columns_
       };
       for (int64_t array_idx = 0; OB_SUCC(ret) && array_idx < 2; ++array_idx) {
         for (int64_t i = 0; OB_SUCC(ret) && i < src_arrays[array_idx]->count(); ++i) {
-          const ObFileTableColumnDef &src = src_arrays[array_idx]->at(i);
-          ObFileTableColumnDef dst;
+          const ObLocalColumnDef &src = src_arrays[array_idx]->at(i);
+          ObLocalColumnDef dst;
           dst.type_ = src.type_;
           dst.nullable_ = src.nullable_;
           dst.max_length_ = src.max_length_;

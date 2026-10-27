@@ -41,7 +41,7 @@
 #include "sql/resolver/dcl/ob_dcl_resolver.h"
 #include "sql/resolver/ddl/ob_ddl_resolver.h"
 #include "sql/hybrid_search/ob_hybrid_search_executor.h"
-#include "sql/engine/basic/ob_file_scan_utils.h"
+#include "sql/engine/basic/ob_local_file_reader.h"
 
 namespace oceanbase
 {
@@ -55,15 +55,15 @@ namespace sql
 namespace
 {
 int append_file_column(ObIAllocator &allocator,
-                       ObIArray<ObFileTableColumnDef> &columns,
+                       ObIArray<ObLocalColumnDef> &columns,
                        const char *name,
-                       const ObFileColumnType type,
+                       const ObLocalColumnType type,
                        const bool nullable = false,
                        const int64_t max_length = 0,
                        const char *source_name = nullptr)
 {
   int ret = OB_SUCCESS;
-  ObFileTableColumnDef column;
+  ObLocalColumnDef column;
   column.type_ = type;
   column.nullable_ = nullable;
   column.max_length_ = max_length;
@@ -80,17 +80,17 @@ int append_file_column(ObIAllocator &allocator,
 }
 
 int append_inferred_file_columns(ObIAllocator &allocator,
-                                 const std::vector<ObFileColumnSchema> &inferred,
-                                 ObIArray<ObFileTableColumnDef> &columns)
+                                 const std::vector<ObLocalColumnSpec> &inferred,
+                                 ObIArray<ObLocalColumnDef> &columns)
 {
   int ret = OB_SUCCESS;
   for (int64_t i = 0; OB_SUCC(ret) && i < static_cast<int64_t>(inferred.size()); ++i) {
-    const ObFileColumnSchema &src = inferred.at(i);
+    const ObLocalColumnSpec &src = inferred.at(i);
     const ObString source_name(static_cast<int32_t>(src.source_name_.length()), src.source_name_.data());
     const ObString column_name(static_cast<int32_t>(src.column_name_.length()), src.column_name_.data());
     const ObString source_type_name(static_cast<int32_t>(src.source_type_name_.length()),
                                     src.source_type_name_.data());
-    ObFileTableColumnDef dst;
+    ObLocalColumnDef dst;
     dst.type_ = src.type_;
     dst.nullable_ = src.nullable_;
     dst.max_length_ = src.max_length_;
@@ -4241,16 +4241,16 @@ int ObDMLResolver::resolve_file_table_item(const ParseNode &parse_tree,
   int ret = OB_SUCCESS;
   ObDMLStmt *stmt = get_stmt();
   TableItem *item = nullptr;
-  ObFileTableDef *file_def = nullptr;
+  ObLocalTableDef *file_def = nullptr;
   ObString path;
   ObString format_name("auto");
   ObString secure_file_priv;
   ObString alias_name;
   std::string canonical_path;
-  std::vector<ObFileColumnSchema> columns;
-  ObFileFormat requested_format = ObFileFormat::AUTO;
-  ObFileFormat actual_format = ObFileFormat::INVALID;
-  ObFileTableKind table_kind = ObFileTableKind::INVALID;
+  std::vector<ObLocalColumnSpec> columns;
+  ObLocalFileFormat requested_format = ObLocalFileFormat::AUTO;
+  ObLocalFileFormat actual_format = ObLocalFileFormat::INVALID;
+  ObLocalFileTableKind table_kind = ObLocalFileTableKind::INVALID;
   uint64_t device = 0;
   uint64_t inode = 0;
   int64_t row_count = 0;
@@ -4329,12 +4329,12 @@ int ObDMLResolver::resolve_file_table_item(const ParseNode &parse_tree,
   if (OB_SUCC(ret)) {
     if (is_function_form) {
       switch (function_kind) {
-        case 1: requested_format = ObFileFormat::CSV; break;
+        case 1: requested_format = ObLocalFileFormat::CSV; break;
         case 2:
-        case 3: requested_format = ObFileFormat::JSONL; break;
-        case 4: requested_format = ObFileFormat::PARQUET; break;
+        case 3: requested_format = ObLocalFileFormat::JSONL; break;
+        case 4: requested_format = ObLocalFileFormat::PARQUET; break;
         case 5:
-          requested_format = ObFileFormat::AUTO;
+          requested_format = ObLocalFileFormat::AUTO;
           is_glob = true;
           break;
         default:
@@ -4353,7 +4353,7 @@ int ObDMLResolver::resolve_file_table_item(const ParseNode &parse_tree,
                                                  *allocator_,
                                                  format_name))) {
         LOG_WARN("file scan format must be a string literal", K(ret));
-      } else if (OB_FAIL(ObFileScanUtils::parse_format(
+      } else if (OB_FAIL(ObLocalFileSchema::parse_format(
                    std::string(format_name.ptr(), format_name.length()), requested_format))) {
         LOG_WARN("unsupported file scan format", K(ret), K(format_name));
       }
@@ -4399,8 +4399,8 @@ int ObDMLResolver::resolve_file_table_item(const ParseNode &parse_tree,
           LOG_WARN("empty format option for file sql", K(ret));
         } else if (ObCharset::case_insensitive_equal(
                      option_format, ObString("newline_delimited"))) {
-          requested_format = ObFileFormat::JSONL;
-        } else if (OB_FAIL(ObFileScanUtils::parse_format(
+          requested_format = ObLocalFileFormat::JSONL;
+        } else if (OB_FAIL(ObLocalFileSchema::parse_format(
                      std::string(option_format.ptr(), option_format.length()),
                      requested_format))) {
           LOG_WARN("unsupported file sql format option", K(ret), K(option_format));
@@ -4424,7 +4424,7 @@ int ObDMLResolver::resolve_file_table_item(const ParseNode &parse_tree,
         input_path.erase(input_path.size() - 1);
       }
     }
-    if (OB_FAIL(ObFileScanUtils::canonicalize_path(input_path, canonical_path))) {
+    if (OB_FAIL(ObLocalFileSchema::canonicalize_path(input_path, canonical_path))) {
       LOG_WARN("failed to canonicalize file table path", K(ret), K(path));
     } else if (OB_FAIL(session_info_->get_secure_file_priv(secure_file_priv))) {
       LOG_WARN("failed to get secure_file_priv", K(ret));
@@ -4440,16 +4440,16 @@ int ObDMLResolver::resolve_file_table_item(const ParseNode &parse_tree,
   if (OB_SUCC(ret)) {
     const std::string input_path = canonical_path;
     if (T_FILE_LIST_TABLE == parse_tree.type_ || is_glob) {
-      table_kind = ObFileTableKind::LIST;
-      actual_format = ObFileFormat::INVALID;
-      if (OB_FAIL(ObFileScanUtils::get_directory_fingerprint(
+      table_kind = ObLocalFileTableKind::LIST;
+      actual_format = ObLocalFileFormat::INVALID;
+      if (OB_FAIL(ObLocalFileSchema::get_directory_fingerprint(
                     input_path, canonical_path, device, inode, modified_time_ns))) {
         LOG_WARN("failed to fingerprint file list directory", K(ret), K(path));
       }
     } else {
       table_kind = T_FILE_SCHEMA_TABLE == parse_tree.type_
-                 ? ObFileTableKind::SCHEMA : ObFileTableKind::SCAN;
-      if (OB_FAIL(ObFileScanUtils::infer_schema(input_path,
+                 ? ObLocalFileTableKind::SCHEMA : ObLocalFileTableKind::SCAN;
+      if (OB_FAIL(ObLocalFileSchema::infer_schema(input_path,
                                                 requested_format,
                                                 columns,
                                                 row_count,
@@ -4467,11 +4467,11 @@ int ObDMLResolver::resolve_file_table_item(const ParseNode &parse_tree,
     }
   }
   if (OB_SUCC(ret)
-      && OB_ISNULL(file_def = static_cast<ObFileTableDef *>(allocator_->alloc(sizeof(ObFileTableDef))))) {
+      && OB_ISNULL(file_def = static_cast<ObLocalTableDef *>(allocator_->alloc(sizeof(ObLocalTableDef))))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("failed to allocate file table definition", K(ret));
   } else if (OB_SUCC(ret)) {
-    file_def = new (file_def) ObFileTableDef();
+    file_def = new (file_def) ObLocalTableDef();
     file_def->kind_ = table_kind;
     file_def->format_ = actual_format;
     file_def->estimated_rows_ = row_count;
@@ -4485,31 +4485,31 @@ int ObDMLResolver::resolve_file_table_item(const ParseNode &parse_tree,
     } else if (OB_FAIL(ob_write_string(*allocator_, secure_file_priv, file_def->secure_file_priv_))) {
       LOG_WARN("failed to copy secure file privilege", K(ret));
     }
-    if (OB_SUCC(ret) && ObFileTableKind::SCAN == table_kind) {
+    if (OB_SUCC(ret) && ObLocalFileTableKind::SCAN == table_kind) {
       ret = append_inferred_file_columns(*allocator_, columns, file_def->columns_);
-    } else if (OB_SUCC(ret) && ObFileTableKind::SCHEMA == table_kind) {
+    } else if (OB_SUCC(ret) && ObLocalFileTableKind::SCHEMA == table_kind) {
       if (OB_FAIL(append_inferred_file_columns(*allocator_, columns, file_def->source_columns_))) {
         LOG_WARN("failed to store source schema", K(ret));
-      } else if (OB_FAIL(append_file_column(*allocator_, file_def->columns_, "ordinal_position", ObFileColumnType::BIGINT))) {
-      } else if (OB_FAIL(append_file_column(*allocator_, file_def->columns_, "column_name", ObFileColumnType::VARCHAR, false, 256))) {
-      } else if (OB_FAIL(append_file_column(*allocator_, file_def->columns_, "source_name", ObFileColumnType::VARCHAR, false, 256))) {
-      } else if (OB_FAIL(append_file_column(*allocator_, file_def->columns_, "sql_type", ObFileColumnType::VARCHAR, false, 64))) {
-      } else if (OB_FAIL(append_file_column(*allocator_, file_def->columns_, "source_type", ObFileColumnType::VARCHAR, false, 64))) {
-      } else if (OB_FAIL(append_file_column(*allocator_, file_def->columns_, "nullable", ObFileColumnType::BOOLEAN))) {
+      } else if (OB_FAIL(append_file_column(*allocator_, file_def->columns_, "ordinal_position", ObLocalColumnType::BIGINT))) {
+      } else if (OB_FAIL(append_file_column(*allocator_, file_def->columns_, "column_name", ObLocalColumnType::VARCHAR, false, 256))) {
+      } else if (OB_FAIL(append_file_column(*allocator_, file_def->columns_, "source_name", ObLocalColumnType::VARCHAR, false, 256))) {
+      } else if (OB_FAIL(append_file_column(*allocator_, file_def->columns_, "sql_type", ObLocalColumnType::VARCHAR, false, 64))) {
+      } else if (OB_FAIL(append_file_column(*allocator_, file_def->columns_, "source_type", ObLocalColumnType::VARCHAR, false, 64))) {
+      } else if (OB_FAIL(append_file_column(*allocator_, file_def->columns_, "nullable", ObLocalColumnType::BOOLEAN))) {
       }
     } else if (OB_SUCC(ret) && is_glob) {
       // DuckDB glob() yields exactly one column named "file" holding the path
       if (OB_FAIL(append_file_column(*allocator_, file_def->columns_, "file",
-                                     ObFileColumnType::VARCHAR, false, 4096))) {
+                                     ObLocalColumnType::VARCHAR, false, 4096))) {
         LOG_WARN("failed to build glob column", K(ret));
       }
     } else if (OB_SUCC(ret)) {
-      if (OB_FAIL(append_file_column(*allocator_, file_def->columns_, "file_name", ObFileColumnType::VARCHAR, false, 1024))) {
-      } else if (OB_FAIL(append_file_column(*allocator_, file_def->columns_, "file_path", ObFileColumnType::VARCHAR, false, 4096))) {
-      } else if (OB_FAIL(append_file_column(*allocator_, file_def->columns_, "file_format", ObFileColumnType::VARCHAR, false, 16))) {
-      } else if (OB_FAIL(append_file_column(*allocator_, file_def->columns_, "file_size", ObFileColumnType::BIGINT))) {
-      } else if (OB_FAIL(append_file_column(*allocator_, file_def->columns_, "modified_time", ObFileColumnType::DATETIME))) {
-      } else if (OB_FAIL(append_file_column(*allocator_, file_def->columns_, "queryable", ObFileColumnType::BOOLEAN))) {
+      if (OB_FAIL(append_file_column(*allocator_, file_def->columns_, "file_name", ObLocalColumnType::VARCHAR, false, 1024))) {
+      } else if (OB_FAIL(append_file_column(*allocator_, file_def->columns_, "file_path", ObLocalColumnType::VARCHAR, false, 4096))) {
+      } else if (OB_FAIL(append_file_column(*allocator_, file_def->columns_, "file_format", ObLocalColumnType::VARCHAR, false, 16))) {
+      } else if (OB_FAIL(append_file_column(*allocator_, file_def->columns_, "file_size", ObLocalColumnType::BIGINT))) {
+      } else if (OB_FAIL(append_file_column(*allocator_, file_def->columns_, "modified_time", ObLocalColumnType::DATETIME))) {
+      } else if (OB_FAIL(append_file_column(*allocator_, file_def->columns_, "queryable", ObLocalColumnType::BOOLEAN))) {
       }
     }
   }
@@ -8019,20 +8019,20 @@ int ObDMLResolver::resolve_file_scan_column_items(const TableItem &table_item,
   CK (OB_LIKELY(table_item.is_file_table()));
   CK (OB_NOT_NULL(table_item.file_table_def_));
   for (int64_t i = 0; OB_SUCC(ret) && i < table_item.file_table_def_->columns_.count(); ++i) {
-    const ObFileTableColumnDef &column = table_item.file_table_def_->columns_.at(i);
+    const ObLocalColumnDef &column = table_item.file_table_def_->columns_.at(i);
     ColumnItem *col_item = stmt->get_column_item(table_item.table_id_, column.column_name_);
     if (OB_ISNULL(col_item)) {
       ObObjMeta meta;
       ObAccuracy accuracy;
       ObObjType obj_type = ObVarcharType;
       switch (column.type_) {
-        case ObFileColumnType::BOOLEAN: obj_type = ObTinyIntType; break;
-        case ObFileColumnType::BIGINT: obj_type = ObIntType; break;
-        case ObFileColumnType::DOUBLE: obj_type = ObDoubleType; break;
-        case ObFileColumnType::DATE: obj_type = ObDateType; break;
-        case ObFileColumnType::DATETIME: obj_type = ObDateTimeType; break;
-        case ObFileColumnType::NULL_TYPE:
-        case ObFileColumnType::VARCHAR: obj_type = ObVarcharType; break;
+        case ObLocalColumnType::BOOLEAN: obj_type = ObTinyIntType; break;
+        case ObLocalColumnType::BIGINT: obj_type = ObIntType; break;
+        case ObLocalColumnType::DOUBLE: obj_type = ObDoubleType; break;
+        case ObLocalColumnType::DATE: obj_type = ObDateType; break;
+        case ObLocalColumnType::DATETIME: obj_type = ObDateTimeType; break;
+        case ObLocalColumnType::NULL_TYPE:
+        case ObLocalColumnType::VARCHAR: obj_type = ObVarcharType; break;
         default:
           ret = OB_NOT_SUPPORTED;
           LOG_WARN("unsupported inferred file column type", K(ret), K(column.type_), K(i));

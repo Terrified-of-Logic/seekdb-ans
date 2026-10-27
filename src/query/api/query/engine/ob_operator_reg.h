@@ -513,14 +513,15 @@ class ObFunctionTableOp;
 REGISTER_OPERATOR(ObLogFunctionTable, PHY_FUNCTION_TABLE, ObFunctionTableSpec,
                   ObFunctionTableOp, NOINPUT);
 
-class ObLogFileScan;
-class ObFileScanSpec;
-class ObFileScanOp;
-// NOTE: row-mode operator. The reference implementation of ObFileScanOp writes batch
-// results through ObExpr::locate_batch_datums(), whose frame layout does not match this
-// tree's vectorized engine, so the row interface (inner_get_next_row) is used instead.
-REGISTER_OPERATOR(ObLogFileScan, PHY_FILE_SCAN, ObFileScanSpec,
-                  ObFileScanOp, NOINPUT);
+class ObLogLocalFileScan;
+class ObLocalFileScanSpec;
+class ObLocalFileScanOp;
+// NOTE: row mode operator.  The batch interface of the local file scan is only used
+// as a fast path by the executor; the row interface (inner_get_next_row) remains the
+// authoritative contract, so a plan can be executed by either path with identical
+// results.
+REGISTER_OPERATOR(ObLogLocalFileScan, PHY_FILE_SCAN, ObLocalFileScanSpec,
+                  ObLocalFileScanOp, NOINPUT);
 
 class ObLogStatCollector;
 class ObStatCollectorSpec;

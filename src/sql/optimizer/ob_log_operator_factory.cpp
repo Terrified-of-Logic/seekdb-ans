@@ -28,7 +28,7 @@
 #include "ob_log_distinct.h"
 #include "ob_log_expr_values.h"
 #include "ob_log_function_table.h"
-#include "ob_log_file_scan.h"
+#include "ob_log_local_file_scan.h"
 #include "ob_log_json_table.h"
 #include "ob_log_values.h"
 #include "ob_log_material.h"
@@ -246,9 +246,9 @@ ObLogicalOperator *ObLogOperatorFactory::allocate(ObLogPlan &plan, ObLogOpType t
     break;
   }
   case LOG_FILE_SCAN: {
-    ptr = allocator_.alloc(sizeof(ObLogFileScan));
+    ptr = allocator_.alloc(sizeof(ObLogLocalFileScan));
     if (NULL != ptr) {
-      ret_op = new (ptr) ObLogFileScan(plan);
+      ret_op = new (ptr) ObLogLocalFileScan(plan);
     }
     break;
   }

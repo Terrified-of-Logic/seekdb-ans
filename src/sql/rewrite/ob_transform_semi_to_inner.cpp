@@ -20,7 +20,7 @@
 #include "sql/optimizer/ob_log_table_scan.h"
 #include "sql/optimizer/ob_log_join.h"
 #include "sql/optimizer/ob_log_function_table.h"
-#include "sql/optimizer/ob_log_file_scan.h"
+#include "sql/optimizer/ob_log_local_file_scan.h"
 #include "sql/optimizer/ob_log_values_table_access.h"
 using namespace oceanbase::sql;
 using namespace oceanbase::common;
@@ -1351,7 +1351,7 @@ int ObTransformSemiToInner::find_operator(ObLogicalOperator* root,
       table_op = scan;
     }
   } else if (log_op_def::LOG_FILE_SCAN == root->get_type()) {
-    ObLogFileScan *scan = static_cast<ObLogFileScan *>(root);
+    ObLogLocalFileScan *scan = static_cast<ObLogLocalFileScan *>(root);
     if (scan->get_table_id() == table_id) {
       table_op = scan;
     }

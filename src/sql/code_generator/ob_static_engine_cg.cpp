@@ -29,7 +29,7 @@
 #include "sql/optimizer/ob_log_insert.h"
 #include "sql/optimizer/ob_log_expr_values.h"
 #include "sql/optimizer/ob_log_function_table.h"
-#include "sql/optimizer/ob_log_file_scan.h"
+#include "sql/optimizer/ob_log_local_file_scan.h"
 #include "sql/optimizer/ob_log_json_table.h"
 #include "sql/optimizer/ob_log_values.h"
 #include "sql/optimizer/ob_log_subplan_filter.h"
@@ -96,7 +96,7 @@
 #include "sql/engine/pdml/static/ob_px_sstable_insert_op.h"
 #include "sql/engine/basic/ob_select_into_op.h"
 #include "sql/engine/basic/ob_function_table_op.h"
-#include "sql/engine/basic/ob_file_scan_op.h"
+#include "sql/engine/basic/ob_local_file_scan_op.h"
 #include "sql/engine/basic/ob_json_table_op.h"
 #include "sql/engine/dml/ob_table_insert_op.h"
 #include "sql/engine/basic/ob_stat_collector_op.h"
@@ -5559,13 +5559,13 @@ int ObStaticEngineCG::generate_spec(ObLogFunctionTable &op, ObFunctionTableSpec 
   return ret;
 }
 
-int ObStaticEngineCG::generate_spec(ObLogFileScan &op, ObFileScanSpec &spec,
+int ObStaticEngineCG::generate_spec(ObLogLocalFileScan &op, ObLocalFileScanSpec &spec,
                                     const bool in_root_job)
 {
   UNUSED(in_root_job);
   int ret = OB_SUCCESS;
   ObIAllocator &alloc = phy_plan_->get_allocator();
-  const ObFileTableDef *file_def = op.get_file_table_def();
+  const ObLocalTableDef *file_def = op.get_file_table_def();
   if (OB_ISNULL(op.get_stmt()) || OB_ISNULL(file_def)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid logical file scan", K(ret), KP(file_def));

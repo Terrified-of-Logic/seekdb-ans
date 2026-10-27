@@ -27,7 +27,7 @@
 #include "sql/ob_sql_define.h"
 #include "sql/resolver/dml/ob_sql_hint.h"
 #include "sql/ob_sql_utils.h"
-#include "sql/ob_file_scan_common.h"
+#include "sql/ob_local_file_common.h"
 #include "sql/resolver/dml/ob_raw_expr_sets.h"
 #include "sql/resolver/expr/ob_raw_expr_copier.h"
 #include "sql/resolver/dml/ob_stmt_expr_visitor.h"
@@ -268,7 +268,7 @@ struct TableItem
   int deep_copy_values_table_def(const ObValuesTableDef& table_def,
                                  ObIRawExprCopier &expr_copier,
                                  ObIAllocator* allocator);
-  int deep_copy_file_table_def(const ObFileTableDef &file_def, ObIAllocator *allocator);
+  int deep_copy_file_table_def(const ObLocalTableDef &file_def, ObIAllocator *allocator);
   virtual bool has_for_update() const { return for_update_; }
   // if real table id, it is valid for all threads,
   // else if generated id, it is unique just during the thread session
@@ -299,7 +299,7 @@ struct TableItem
   ObRawExpr *snapshot_query_expr_;
   SnapshotQueryType snapshot_query_type_;
   ObRawExpr *function_table_expr_;
-  ObFileTableDef *file_table_def_;
+  ObLocalTableDef *file_table_def_;
   int64_t ddl_schema_version_;
   int64_t ddl_table_id_;
   // table partition
