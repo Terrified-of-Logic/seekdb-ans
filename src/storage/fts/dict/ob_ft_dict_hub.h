@@ -17,8 +17,12 @@
 #ifndef _OCEANBASE_STORAGE_FTS_DICT_OB_FT_DICT_HUB_H_
 #define _OCEANBASE_STORAGE_FTS_DICT_OB_FT_DICT_HUB_H_
 
+#include <atomic>
+
+#include "lib/allocator/page_arena.h"
 #include "lib/charset/ob_charset.h"
 #include "lib/lock/ob_bucket_lock.h"
+#include "lib/lock/ob_mutex.h"
 #include "storage/fts/dict/ob_ft_dict_def.h"
 
 namespace oceanbase
@@ -93,11 +97,38 @@ private:
 };
 
 class ObFTCacheRangeContainer;
+class ObIFTDict;
+class ObFTRangeDict;
+struct ObFTSharedDictItem;
+
+// A shared dictionary is immutable once it is built (the range dict only reads its
+// dictionary cache container), so one instance per dictionary type can serve every
+// parser of this process. That removes the per-document dictionary cache lookup and
+// range-dict construction from the tokenize/build hot path.
+//
+// Ownership rules (they are the whole difficulty of the sharing):
+//  - container and range dict live in the hub's own arena, and the container has to
+//    outlive the range dict because the dict reads it;
+//  - an arena reset never runs a destructor, so every path that drops an item has to
+//    destroy the range dict first, then the item (whose destructor destroys the
+//    container, and that is what releases the pinned dictionary cache handles);
+//  - parsers never own a shared dictionary: they only hold a raw pointer while they
+//    live, and report their existence through a holder counter.
 class ObFTDictHub
 {
 public:
-  ObFTDictHub() : is_inited_(false), dict_map_(), rw_dict_lock_() {}
-  ~ObFTDictHub() {}
+  ObFTDictHub()
+      : is_inited_(false),
+        dict_map_(),
+        rw_dict_lock_(),
+        shared_dict_map_(),
+        shared_dict_lock_(),
+        build_lock_(),
+        shared_dict_alloc_(),
+        holder_cnt_(0)
+  {
+  }
+  ~ObFTDictHub();
 
   int init();
 
@@ -107,17 +138,53 @@ public:
 
   int load_cache(const ObFTDictDesc &desc, ObFTCacheRangeContainer &container);
 
+  // Acquire the shared IK dictionaries of one parser. The returned dictionaries are
+  // owned by the hub; the caller must not destroy them, and must call
+  // release_ik_dicts() exactly once when it stops using them.
+  int acquire_ik_dicts(const ObFTDictDesc &main_desc,
+                       const ObFTDictDesc &quan_desc,
+                       ObIFTDict *&main_dict,
+                       ObIFTDict *&quan_dict);
+
+  // Drop the holder reference taken by one successful acquire_ik_dicts().
+  int release_ik_dicts();
+
+  int64_t get_shared_dict_holder_cnt() const { return holder_cnt_.load(); }
+
 private:
   int get_dict_info(const ObFTDictInfoKey &key, ObFTDictInfo &info);
 
   int put_dict_info(const ObFTDictInfoKey &key, const ObFTDictInfo &info);
 
+  int acquire_ik_dict(const ObFTDictDesc &desc, ObIFTDict *&dict);
+
+  int get_shared_dict(const ObFTDictInfoKey &key, ObFTSharedDictItem *&item);
+
+  int put_shared_dict(const ObFTDictInfoKey &key, ObFTSharedDictItem *item);
+
+  int build_shared_dict(const ObFTDictDesc &desc, ObFTSharedDictItem *&item);
+
+  // Destroy every shared dictionary. It must not run while a parser still holds one,
+  // so it waits for the holders to drain and gives up (leaking) instead of freeing
+  // dictionaries that somebody may still be matching against.
+  int clear_shared_dicts();
 
 private:
+  static constexpr int K_MAX_SHARED_DICT_BUCKET = 128;
   bool is_inited_;
   // holds info of dict
   hash::ObHashMap<ObFTDictInfoKey, ObFTDictInfo> dict_map_;
   ObBucketLock rw_dict_lock_;
+  // holds the process level shared immutable dictionaries
+  hash::ObHashMap<ObFTDictInfoKey, ObFTSharedDictItem *> shared_dict_map_;
+  ObBucketLock shared_dict_lock_;
+  // one shot build mutex. It must never be nested inside a bucket latch: load_cache()
+  // and build_cache() take the dict cache bucket latch themselves.
+  lib::ObMutex build_lock_;
+  // payload arena of the shared dictionaries
+  ObArenaAllocator shared_dict_alloc_;
+  // number of live parsers that hold a shared dictionary
+  std::atomic<int64_t> holder_cnt_;
 };
 
 } //  namespace storage

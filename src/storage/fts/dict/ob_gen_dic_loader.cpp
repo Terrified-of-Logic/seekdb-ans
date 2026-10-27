@@ -125,20 +125,38 @@ int ObGenDicLoader::get_dic_loader(const ObString &parser_name,
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(dic_loader_key.init(parser_name, charset))) {
   } else {
-    TCWLockGuard guard(lock_);
-    if (OB_FAIL(dic_loader_map_.get_refactored(dic_loader_key, dic_loader))) {
-      if (OB_HASH_NOT_EXIST == ret) {
-        if (OB_FAIL(gen_dic_loader(dic_loader_key, dic_loader))) {
-        } else if (OB_ISNULL(dic_loader)) {
-          ret = OB_ERR_UNEXPECTED;
-        } else if (OB_FAIL(dic_loader_map_.set_refactored(dic_loader_key, dic_loader))) {
-        } else if (OB_FALSE_IT(dic_loader->inc_ref())) {
-        } else if (OB_FAIL(loader_handle.set_loader(dic_loader))) {
+    // Fast path: an already built loader is only looked up, a read lock is enough. The map is only
+    // modified under the write lock below.
+    {
+      TCRLockGuard read_guard(lock_);
+      if (OB_FAIL(dic_loader_map_.get_refactored(dic_loader_key, dic_loader))) {
+        if (OB_HASH_NOT_EXIST != ret) {
+          LOG_WARN("get dic loader failed", K(ret));
         }
-      } else {
-        ret = OB_ERR_UNEXPECTED;
+      } else if (OB_FAIL(loader_handle.set_loader(dic_loader))) {
+        LOG_WARN("set dic loader failed", K(ret));
       }
-    } else if (OB_FAIL(loader_handle.set_loader(dic_loader))) {
+    }
+    if (OB_HASH_NOT_EXIST == ret) {
+      ret = OB_SUCCESS;
+      TCWLockGuard write_guard(lock_);
+      // double check: another thread may have built the loader before the write lock was taken
+      if (OB_FAIL(dic_loader_map_.get_refactored(dic_loader_key, dic_loader))) {
+        if (OB_HASH_NOT_EXIST == ret) {
+          ret = OB_SUCCESS;
+          if (OB_FAIL(gen_dic_loader(dic_loader_key, dic_loader))) {
+          } else if (OB_ISNULL(dic_loader)) {
+            ret = OB_ERR_UNEXPECTED;
+          } else if (OB_FAIL(dic_loader_map_.set_refactored(dic_loader_key, dic_loader))) {
+          } else if (OB_FALSE_IT(dic_loader->inc_ref())) {
+          } else if (OB_FAIL(loader_handle.set_loader(dic_loader))) {
+          }
+        } else {
+          LOG_WARN("get dic loader failed", K(ret));
+        }
+      } else if (OB_FAIL(loader_handle.set_loader(dic_loader))) {
+        LOG_WARN("set dic loader failed", K(ret));
+      }
     }
   }
   return ret;

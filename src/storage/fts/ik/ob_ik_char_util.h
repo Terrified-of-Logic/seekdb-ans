@@ -445,27 +445,46 @@ template <ObCharsetType CS_TYPE>
 inline int ObFTCharUtil::do_classify(const char *input, const uint8_t char_len, CharType &type)
 {
   int ret = OB_SUCCESS;
-  bool checker = false;
+  ob_wc_t unicode = 0;
   type = CharType::USELESS;
 
-  if (OB_FAIL(is_alpha<CS_TYPE>(input, char_len, checker))) {
-  } else if (checker) {
+  // ASCII is a single byte in UTF8MB4 and only two classes are possible, so the
+  // decoder call is skipped for the bulk of English/whitespace/punctuation text.
+  if (OB_LIKELY(1 == char_len && static_cast<unsigned char>(input[0]) < 0x80)) {
+    // ASCII only has two of the classes: letters and digits (classified as
+    // ARABIC_LETTER by this code base), everything else is USELESS.
+    const unsigned char byte = static_cast<unsigned char>(input[0]);
+    if ((byte >= 'A' && byte <= 'Z') || (byte >= 'a' && byte <= 'z')) {
+      type = CharType::ENGLISH_LETTER;
+    } else if (byte >= '0' && byte <= '9') {
+      type = CharType::ARABIC_LETTER;
+    } else {
+      type = CharType::USELESS;
+    }
+    return ret;
+  }
+
+  // Decode the character once and classify the decoded value. The per-class
+  // helpers used to decode the very same bytes again for every class, which is
+  // the dominant cost of the per-character hot path of both TOKENIZE and index
+  // building. Every class is still checked in the original order so the outcome
+  // is byte-for-byte identical.
+  if (OB_FAIL(decode_unicode<CS_TYPE>(input, char_len, unicode))) {
+  } else if (ObUnicodeBlockUtils::is_alpha(unicode)) {
     type = CharType::ENGLISH_LETTER;
-  } else if (OB_FAIL(is_arabic<CS_TYPE>(input, char_len, checker))) {
-  } else if (checker) {
+  } else if (ObUnicodeBlockUtils::is_arabic(unicode)) {
     type = CharType::ARABIC_LETTER;
-  } else if (OB_FAIL(is_chinese<CS_TYPE>(input, char_len, checker))) {
-  } else if (checker) {
+  } else if (ObUnicodeBlockUtils::is_chinese(unicode)) {
     type = CharType::CHINESE;
-  } else if (OB_FAIL(is_other_cjk<CS_TYPE>(input, char_len, checker))) {
-  } else if (checker) {
+  } else if (ObUnicodeBlockUtils::is_other_cjk(unicode)) {
     type = CharType::OTHER_CJK;
-  } else if (OB_FAIL(is_surrogate_high<CS_TYPE>(input, char_len, checker))) {
-  } else if (checker) {
-    type = CharType::SURROGATE_HIGH;
-  } else if (OB_FAIL(is_surrogate_low<CS_TYPE>(input, char_len, checker))) {
-  } else if (checker) {
-    type = CharType::SURROGATE_LOW;
+  } else if (CS_TYPE == CHARSET_UTF16 || CS_TYPE == CHARSET_UTF16LE) {
+    // Surrogate pairs only exist in UTF16; UTF8MB4 never reports them.
+    if (ObUnicodeBlockUtils::check_high_surrogate(unicode)) {
+      type = CharType::SURROGATE_HIGH;
+    } else if (ObUnicodeBlockUtils::check_low_surrogate(unicode)) {
+      type = CharType::SURROGATE_LOW;
+    }
   }
   return ret;
 }

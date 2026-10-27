@@ -98,7 +98,9 @@ int ObTextWhitespaceTokenizer::get_next(ObDatum &next_token, int64_t &token_freq
     int64_t token_len = 0;
     // to next non-whitespace pos
     while (OB_SUCC(ret) && found_delimiter()) {
-      const int64_t c_len = ob_mbcharlen_ptr(cs_, doc + trav_pos_, doc + doc_len);
+      const unsigned char byte = static_cast<unsigned char>(doc[trav_pos_]);
+      const int64_t c_len = (NULL != cs_ && 1 == cs_->mbminlen && byte < 0x80)
+          ? 1 : ob_mbcharlen_ptr(cs_, doc + trav_pos_, doc + doc_len);
       trav_pos_ += c_len;
       if (trav_pos_ >= doc_len || 0 == c_len) {// if char is invalid, just skip the rest of document
         iter_end_ = true;
@@ -112,7 +114,9 @@ int ObTextWhitespaceTokenizer::get_next(ObDatum &next_token, int64_t &token_freq
 
     // to next whitespace pos
     while (OB_SUCC(ret) && !found_delimiter()) {
-      const int64_t c_len = ob_mbcharlen_ptr(cs_, doc + trav_pos_, doc + doc_len);
+      const unsigned char byte = static_cast<unsigned char>(doc[trav_pos_]);
+      const int64_t c_len = (NULL != cs_ && 1 == cs_->mbminlen && byte < 0x80)
+          ? 1 : ob_mbcharlen_ptr(cs_, doc + trav_pos_, doc + doc_len);
       trav_pos_ += c_len;
       token_len += c_len;
       if (trav_pos_ >= doc_len || 0 == c_len) {
@@ -295,7 +299,17 @@ int ObBasicEnglishNormalizer::get_next(ObDatum &next_token, int64_t &token_freq)
     } else {
       ObString norm_alnum_token(norm_token_len, norm_token_ptr);
       ObString norm_lower_token;
-      if (OB_FAIL(ObCharset::tolower(cs_, norm_alnum_token, norm_lower_token, norm_allocator_))) {
+      // Pure ASCII without uppercase needs no case folding at all: the token is
+      // returned in place instead of going through tolower() and its buffer.
+      bool unchanged_ascii = (NULL != cs_ && 1 == cs_->mbminlen);
+      for (uint32_t i = 0; unchanged_ascii && i < norm_token_len; ++i) {
+        const unsigned char b = static_cast<unsigned char>(norm_token_ptr[i]);
+        unchanged_ascii = b < 0x80 && !(b >= 'A' && b <= 'Z');
+      }
+      if (unchanged_ascii) {
+        next_token.set_string(norm_alnum_token);
+      } else if (OB_FAIL(ObCharset::tolower(cs_, norm_alnum_token, norm_lower_token,
+                                            norm_allocator_))) {
       } else {
         next_token.set_string(norm_lower_token);
       }

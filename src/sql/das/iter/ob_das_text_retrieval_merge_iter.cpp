@@ -135,7 +135,8 @@ int ObDASTextRetrievalMergeIter::rescan()
   if (0 == query_tokens_.count()) {
   } else {
     next_written_idx_ = 0;
-    limit_param_ = ir_rtdef_->get_inv_idx_scan_rtdef()->limit_param_;
+    limit_param_ = ir_rtdef_->retrieval_limit_.is_valid()
+        ? ir_rtdef_->retrieval_limit_ : ir_rtdef_->get_inv_idx_scan_rtdef()->limit_param_;
   }
   return ret;
 }
@@ -238,7 +239,7 @@ int ObDASTextRetrievalMergeIter::build_query_tokens(const ObDASIRScanCtDef *ir_c
     int64_t doc_length = 0;
     storage::ObFTParseHelper tokenize_helper;
     common::ObSEArray<ObFTWord, 16> tokens;
-    hash::ObHashMap<ObFTWord, int64_t> token_map;
+    storage::ObFTWordMap token_map;
     const int64_t ft_word_bkt_cnt = MAX(search_text_string.length() / 10, 2);
     if (OB_FAIL(tokenize_helper.init(&alloc, parser_name, parser_properties))) {
     } else if (OB_FAIL(token_map.create(ft_word_bkt_cnt, common::ObMemAttr("FTWordMap")))) {
@@ -249,7 +250,7 @@ int ObDASTextRetrievalMergeIter::build_query_tokens(const ObDASIRScanCtDef *ir_c
                            doc_length,
                            token_map))) {
     } else {
-      for (hash::ObHashMap<ObFTWord, int64_t>::const_iterator iter = token_map.begin();
+      for (storage::ObFTWordMap::const_iterator iter = token_map.begin();
           OB_SUCC(ret) && iter != token_map.end();
           ++iter) {
         const ObFTWord &token = iter->first;
@@ -345,7 +346,8 @@ int ObDASTextRetrievalMergeIter::inner_init(ObDASIterParam &param)
       } else if (OB_FAIL(cache_doc_ids_.init(size))) {
       } else if (OB_FAIL(cache_doc_ids_.prepare_allocate(size))) {
       } else {
-        limit_param_ = ir_rtdef_->get_inv_idx_scan_rtdef()->limit_param_;
+        limit_param_ = ir_rtdef_->retrieval_limit_.is_valid()
+            ? ir_rtdef_->retrieval_limit_ : ir_rtdef_->get_inv_idx_scan_rtdef()->limit_param_;
       }
       if (OB_FAIL(ret)) {
       } else if (force_return_docid_) {

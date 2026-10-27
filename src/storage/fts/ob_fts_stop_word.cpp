@@ -74,35 +74,43 @@ void ObStopWordChecker::destroy()
 int ObStopWordChecker::check_stopword(const ObFTWord &word, bool &is_stopword)
 {
   int ret = OB_SUCCESS;
-  
-  
-  common::ObArenaAllocator allocator(lib::ObMemAttr("ChkStopWord"));
   if (OB_UNLIKELY(!inited_)) {
     ret = OB_NOT_INIT;
   } else if (OB_UNLIKELY(word.empty())) {
     ret = OB_INVALID_ARGUMENT;
   } else {
-    common::ObString cmp_str;
-    // do nothing set out with in if type is the same.
-    if (OB_FAIL(common::ObCharset::charset_convert(
-                                       allocator,
-                                       word.get_word().get_string(),
-                                       word.get_collation_type(),
-                                       stopword_type_.get_collation_type(),
-                                       cmp_str))) {
+    // Fast path: the word already has the collation of the stop word set, so no charset conversion
+    // (and no temporary allocator) is needed. Re-wrap the bytes with the set's own meta so that the
+    // hash/compare functions are exactly the same as the slow path below uses.
+    if (word.get_collation_type() == stopword_type_.get_collation_type()) {
+      ObFTWord same_word(word.get_word().get_string().length(),
+                         word.get_word().get_string().ptr(),
+                         stopword_type_);
+      ret = stopword_set_.exist_refactored(same_word);
     } else {
-      ObFTWord converted(cmp_str.length(), cmp_str.ptr(), stopword_type_);
-      ret = stopword_set_.exist_refactored(converted);
-      if (OB_HASH_NOT_EXIST == ret) {
-        is_stopword = false;
-        ret = OB_SUCCESS;
-      } else if (OB_HASH_EXIST == ret) {
-        is_stopword = true;
-        ret = OB_SUCCESS;
-      } else if (OB_SUCC(ret)) {
-        ret = OB_ERR_UNEXPECTED;
+      common::ObArenaAllocator allocator(lib::ObMemAttr("ChkStopWord"));
+      common::ObString cmp_str;
+      if (OB_FAIL(common::ObCharset::charset_convert(
+                                        allocator,
+                                        word.get_word().get_string(),
+                                        word.get_collation_type(),
+                                        stopword_type_.get_collation_type(),
+                                        cmp_str))) {
       } else {
+        ObFTWord converted(cmp_str.length(), cmp_str.ptr(), stopword_type_);
+        ret = stopword_set_.exist_refactored(converted);
       }
+    }
+    if (OB_HASH_NOT_EXIST == ret) {
+      is_stopword = false;
+      ret = OB_SUCCESS;
+    } else if (OB_HASH_EXIST == ret) {
+      is_stopword = true;
+      ret = OB_SUCCESS;
+    } else if (OB_SUCC(ret)) {
+      ret = OB_ERR_UNEXPECTED;
+    } else {
+      // return the error of the hash set or of the charset conversion as is
     }
   }
   return ret;
@@ -158,16 +166,78 @@ bool ObAddWord::is_min_max_word(const int64_t c_len) const
   return flag_.min_max_word() && (c_len < min_token_size_ || c_len > max_token_size_);
 }
 
+// Fast path of casedown_word for the bulk of the mixed Chinese/English text: words made of ASCII
+// only, or of 3-byte CJK code points (U+4000..U+9FFF, which have no case mapping at all and are
+// copied byte for byte). Returns false as soon as a character that the generic case table has to
+// look at is found, in which case the caller falls back to ObCharset::tolower. On success the
+// output bytes are identical to what the case table would produce.
+static bool casedown_fast_scan(const ObString &src, bool &has_upper)
+{
+  bool done = true;
+  has_upper = false;
+  const unsigned char *p = reinterpret_cast<const unsigned char *>(src.ptr());
+  const int64_t len = src.length();
+  for (int64_t i = 0; done && i < len;) {
+    const unsigned char c = p[i];
+    if (c < 0x80) {
+      if (c >= 'A' && c <= 'Z') {
+        has_upper = true;
+      }
+      ++i;
+    } else if (c >= 0xE4 && c <= 0xE9 && i + 2 < len && (p[i + 1] & 0xC0) == 0x80
+               && (p[i + 2] & 0xC0) == 0x80) {
+      i += 3;
+    } else {
+      done = false;
+    }
+  }
+  return done;
+}
+
+static void casedown_fast_write(const ObString &src, char *dst)
+{
+  const unsigned char *p = reinterpret_cast<const unsigned char *>(src.ptr());
+  const int64_t len = src.length();
+  for (int64_t i = 0; i < len;) {
+    const unsigned char c = p[i];
+    if (c < 0x80) {
+      dst[i] = static_cast<char>(c >= 'A' && c <= 'Z' ? c + ('a' - 'A') : c);
+      ++i;
+    } else {
+      dst[i] = static_cast<char>(c);
+      dst[i + 1] = static_cast<char>(p[i + 1]);
+      dst[i + 2] = static_cast<char>(p[i + 2]);
+      i += 3;
+    }
+  }
+}
+
 int ObAddWord::casedown_word(const ObFTWord &src, ObFTWord &dst)
 {
   int ret = OB_SUCCESS;
+  char *buf = nullptr;
+  bool has_upper = false;
+  const ObString src_str = src.get_word().get_string();
   if (OB_UNLIKELY(src.empty())) {
     ret = OB_INVALID_ARGUMENT;
+  } else if (flag_.casedown()
+             && CHARSET_UTF8MB4 == ObCharset::charset_type_by_coll(word_meta_.get_collation_type())
+             && casedown_fast_scan(src_str, has_upper)) {
+    if (!has_upper) {
+      // Nothing to fold, keep the source bytes and skip the copy altogether.
+      dst = src;
+    } else if (OB_ISNULL(buf = static_cast<char *>(allocator_.alloc(src_str.length())))) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+    } else {
+      casedown_fast_write(src_str, buf);
+      ObFTWord tmp(src_str.length(), buf, word_meta_);
+      dst = tmp;
+    }
   } else if (flag_.casedown()) {
     ObString dst_str;
     if (OB_FAIL(ObCharset::tolower(
                     word_meta_.get_collation_type(),
-                    src.get_word().get_string(),
+                    src_str,
                     dst_str,
                     allocator_))) {
     } else {
@@ -198,20 +268,18 @@ int ObAddWord::check_stopword(const ObFTWord &ft_word, bool &is_stopword)
 int ObAddWord::groupby_word(const ObFTWord &word, const int64_t word_freq)
 {
   int ret = OB_SUCCESS;
-  int64_t word_count = 0;
   if (OB_UNLIKELY(word.empty() || word_freq <= 0)) {
     ret = OB_INVALID_ARGUMENT;
   } else if (!flag_.groupby_word()) {
     if (OB_FAIL(word_map_.set_refactored(word, 1/*word count*/))) {
     }
-  } else if (OB_FAIL(word_map_.get_refactored(word, word_count)) && OB_HASH_NOT_EXIST != ret) {
   } else {
-    if (OB_HASH_NOT_EXIST == ret) {
-      word_count = 1;
-    } else {
-      word_count += word_freq;
-    }
-    if (OB_FAIL(word_map_.set_refactored(word, word_count, 1/*overwrite*/))) {
+    // One hash lookup instead of get_refactored + set_refactored: accumulate the frequency in
+    // place when the word is already there, insert it with a count of one otherwise. The stored
+    // key keeps the spelling of its first occurrence, exactly like the overwrite-based version.
+    int64_t added_freq = word_freq;
+    auto add_freq = [added_freq](auto &pair) { pair.second += added_freq; };
+    if (OB_FAIL(word_map_.set_or_update(word, 1/*word count*/, add_freq))) {
     }
   }
   return ret;
