@@ -43,8 +43,16 @@ public:
       if (!std::isfinite(data[i])) { return OB_INVALID_ARGUMENT; }
     }
     try {
-      vectors.reserve(total);
-      ids.reserve(ids.size() + count);
+      // DDL can supply one vector per call. Exact-size reserve here would copy
+      // the entire growing dataset per row and turn staging into quadratic work.
+      if (total > vectors.capacity()) {
+        vectors.reserve(std::min<uint64_t>(1ULL << 28,
+            std::max<uint64_t>(total, std::max<uint64_t>(256, vectors.capacity() * 2))));
+      }
+      const uint64_t new_ids = ids.size() + count;
+      if (new_ids > ids.capacity()) {
+        ids.reserve(std::max<uint64_t>(new_ids, std::max<uint64_t>(16, ids.capacity() * 2)));
+      }
       if (count) {
         vectors.insert(vectors.end(), data, data + static_cast<uint64_t>(count) * dim);
         ids.insert(ids.end(), labels, labels + count);
