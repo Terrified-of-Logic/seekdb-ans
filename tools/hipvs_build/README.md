@@ -52,8 +52,19 @@ export SEEKDB_HIPVS_BUILD_HELPER="$PWD/tools/hipvs_build/hipvs-build-helper"
 
 The helper rpath locates hipVS under the chosen `HIPVS_HOME`. Its transitive ROCm
 libraries must also resolve (`ldd tools/hipvs_build/hipvs-build-helper`).
+When cross-building on a newer Linux distribution, link against a target-compatible
+sysroot/libm or compile inside the target distribution. A binary linked on glibc
+2.43 may otherwise require symbols unavailable on the supplied glibc 2.39 image.
 
 ## End-to-end reproduction
+
+The complete tested suite is also available as one command:
+
+```bash
+PYTHON=python3 bash tools/hipvs_build/run_instance_suite.sh \
+  "$PWD/build_release/src/observer/seekdb" \
+  "$PWD/tools/hipvs_build/hipvs-build-helper" "$PWD/evidence/verified-suite"
+```
 
 Requires Python 3 + NumPy, the `mysql` CLI, `taskset`, and a free local port.
 Each command owns a new data directory and starts/stops only its own server.
