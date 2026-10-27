@@ -31,6 +31,7 @@ int ObDDLArg::assign(const ObDDLArg &other)
     parallelism_ = other.parallelism_;
     task_id_ = other.task_id_;
     is_parallel_ = other.is_parallel_;
+    is_parallelism_explicit_ = other.is_parallelism_explicit_;
   }
   return ret;
 }
@@ -42,7 +43,8 @@ DEF_TO_STRING(ObDDLArg)
        K_(sync_from_primary),
        K_(based_schema_object_infos),
        K_(parallelism),
-       K_(task_id));
+       K_(task_id),
+       K_(is_parallelism_explicit));
   return pos;
 }
 
@@ -52,7 +54,8 @@ OB_SERIALIZE_MEMBER(ObDDLArg,
                     based_schema_object_infos_,
                     parallelism_,
                     task_id_,
-                    is_parallel_);
+                    is_parallel_,
+                    is_parallelism_explicit_);
 
 } // namespace obcall
 } // namespace oceanbase

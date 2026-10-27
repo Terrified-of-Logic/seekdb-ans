@@ -551,7 +551,14 @@ int ObCharset::strcmp(ObCollationType collation_type,
                       int64_t str2_len)
 {
   int result = 0;
-  if (is_argument_valid(collation_type, str1, str1_len, str2, str2_len)) {
+  // Fulltext index building compares the very same word against itself many
+  // times; byte-identical strings compare equal under every collation, so settle
+  // that case before resolving and walking the collation.
+  if (OB_LIKELY(0 <= str1_len && str1_len == str2_len
+                && (0 == str1_len
+                    || (NULL != str1 && NULL != str2 && 0 == MEMCMP(str1, str2, str1_len))))) {
+    result = 0;
+  } else if (is_argument_valid(collation_type, str1, str1_len, str2, str2_len)) {
     const ObCharsetInfo *cs = get_charset(collation_type);
     const bool t_is_prefix = false;
     result = cs->coll->strnncoll(cs,
@@ -571,7 +578,13 @@ int ObCharset::strcmpsp(ObCollationType collation_type,
                         bool cmp_endspace)
 {
   int result = 0;
-  if (is_argument_valid(collation_type, str1, str1_len, str2, str2_len)) {
+  // Same reasoning as ObCharset::strcmp: identical bytes compare equal whatever
+  // the end space rule is, and sort keys repeat heavily during index building.
+  if (OB_LIKELY(0 <= str1_len && str1_len == str2_len
+                && (0 == str1_len
+                    || (NULL != str1 && NULL != str2 && 0 == MEMCMP(str1, str2, str1_len))))) {
+    result = 0;
+  } else if (is_argument_valid(collation_type, str1, str1_len, str2, str2_len)) {
     const ObCharsetInfo *cs = get_charset(collation_type);
     result = cs->coll->strnncollsp(cs,
                                 reinterpret_cast<const unsigned char *>(str1),
