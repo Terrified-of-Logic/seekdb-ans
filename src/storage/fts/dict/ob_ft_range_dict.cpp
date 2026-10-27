@@ -37,12 +37,35 @@
 #include "storage/fts/dict/ob_ft_dict_table_iter.h"
 #include "storage/fts/dict/ob_ft_trie.h"
 
+#include <cstring>
+
 #define USING_LOG_PREFIX STORAGE_FTS
 
 namespace oceanbase
 {
 namespace storage
 {
+
+namespace
+{
+// Compares two dictionary boundary words. The common prefix is compared byte
+// wise, which is what CS_TYPE_UTF8MB4_BIN does; only when the lengths differ is
+// the charset comparison consulted so that its padding rule stays in charge.
+int compare_range_word(const ObString &lhs, const ObString &rhs)
+{
+  const int64_t lhs_len = lhs.length();
+  const int64_t rhs_len = rhs.length();
+  const int64_t common = lhs_len < rhs_len ? lhs_len : rhs_len;
+  int cmp = 0;
+  if (common > 0) {
+    cmp = memcmp(lhs.ptr(), rhs.ptr(), static_cast<size_t>(common));
+  }
+  if (0 == cmp && lhs_len != rhs_len) {
+    cmp = ObCharset::strcmp(ObCollationType::CS_TYPE_UTF8MB4_BIN, lhs, rhs);
+  }
+  return cmp;
+}
+} // namespace
 
 
 int ObFTRangeDict::build_cache_from_ik_dict(const ObFTDictDesc &desc, ObFTCacheRangeContainer &range_container)
@@ -307,10 +330,34 @@ int ObFTRangeDict::init()
     ret = OB_INIT_TWICE;
   } else {
     if (OB_FAIL(build_dict_from_cache(*range_container_))) {
+    } else {
+      check_ranges_ordered();
     }
     is_inited_ = true;
   }
   return ret;
+}
+
+void ObFTRangeDict::check_ranges_ordered()
+{
+  // A range lookup may only use the binary search when the boundaries are
+  // strictly ascending and the ranges do not overlap. Anything else keeps the
+  // linear scan, so an unexpected dictionary layout never changes the result.
+  bool ordered = true;
+  const int64_t count = range_dicts_.size();
+  for (int64_t i = 0; ordered && i < count; ++i) {
+    const ObString start = range_dicts_[i].start_.get_word();
+    const ObString end = range_dicts_[i].end_.get_word();
+    if (compare_range_word(start, end) > 0) {
+      ordered = false;
+    } else if (i > 0) {
+      const ObString prev_end = range_dicts_[i - 1].end_.get_word();
+      if (compare_range_word(prev_end, start) >= 0) {
+        ordered = false;
+      }
+    }
+  }
+  ranges_ordered_ = ordered;
 }
 int ObFTRangeDict::build_ranges(const ObFTDictDesc &desc,
                                 ObIFTDictIterator &iter,
@@ -381,21 +428,36 @@ int ObFTRangeDict::match_with_hit(const ObString &single_word,
 int ObFTRangeDict::find_first_char_range(const ObString &single_word, ObIFTDict *&dict) const
 {
   int ret = OB_SUCCESS;
-  bool found = false;
-  for (int i = 0; OB_SUCC(ret) && !found && i < range_dicts_.size(); ++i) {
-    if (ObCharset::strcmp(ObCollationType::CS_TYPE_UTF8MB4_BIN,
-                          range_dicts_[i].start_.get_word(),
-                          single_word)
-            <= 0
-        && ObCharset::strcmp(ObCollationType::CS_TYPE_UTF8MB4_BIN,
-                             range_dicts_[i].end_.get_word(),
-                             single_word)
-               >= 0) {
-      dict = range_dicts_[i].dict_;
-      found = true;
+  dict = nullptr;
+  const int64_t count = range_dicts_.size();
+  if (ranges_ordered_) {
+    // Ranges ascend by start word and never overlap, so the only candidate is
+    // the last range whose start word is not greater than the search word.
+    int64_t low = 0;
+    int64_t high = count;
+    while (low < high) {
+      const int64_t mid = low + ((high - low) >> 1);
+      if (compare_range_word(range_dicts_[mid].start_.get_word(), single_word) <= 0) {
+        low = mid + 1;
+      } else {
+        high = mid;
+      }
+    }
+    if (low > 0) {
+      const ObFTRange &candidate = range_dicts_[low - 1];
+      if (compare_range_word(candidate.end_.get_word(), single_word) >= 0) {
+        dict = candidate.dict_;
+      }
+    }
+  } else {
+    for (int64_t i = 0; NULL == dict && i < count; ++i) {
+      if (compare_range_word(range_dicts_[i].start_.get_word(), single_word) <= 0
+          && compare_range_word(range_dicts_[i].end_.get_word(), single_word) >= 0) {
+        dict = range_dicts_[i].dict_;
+      }
     }
   }
-  if (!found) {
+  if (OB_ISNULL(dict)) {
     // not found, dis match
     ret = OB_ENTRY_NOT_EXIST;
   }
