@@ -4129,6 +4129,37 @@ int ObDMLResolver::resolve_file_table_item(const ParseNode &parse_tree,
   bool enable_file_sql = false;
   const int64_t expected_child_count = T_FILE_SCAN_TABLE == parse_tree.type_ ? 3 : 2;
   const ParseNode *alias_node = nullptr;
+  // Fast-parameterized SQL delivers literal arguments as T_QUESTIONMARK nodes whose
+  // values live in the parameter store; resolve them to strings here.
+  auto resolve_file_string_arg = [&](const ParseNode &node, ObString &value) -> int {
+    int ret = OB_SUCCESS;
+    value.reset();
+    if (T_QUESTIONMARK != node.type_) {
+      ret = resolve_str_const(node, value);
+    } else {
+      const ParamStore *param_store = params_.param_list_;
+      if (OB_ISNULL(param_store)
+          || node.value_ < 0
+          || node.value_ >= param_store->count()) {
+        ret = OB_INVALID_ARGUMENT;
+        LOG_WARN("invalid file sql parameter index", K(ret), K(node.value_));
+      } else if (!param_store->at(node.value_).is_string_type()) {
+        ret = OB_INVALID_ARGUMENT;
+        LOG_WARN("file sql argument is not a string", K(ret), K(node.value_));
+      } else {
+        const ObString src = param_store->at(node.value_).get_string();
+        char *buf = static_cast<char *>(allocator_->alloc(src.length()));
+        if (OB_ISNULL(buf)) {
+          ret = OB_ALLOCATE_MEMORY_FAILED;
+          LOG_WARN("failed to copy file sql argument", K(ret));
+        } else {
+          MEMCPY(buf, src.ptr(), src.length());
+          value.assign_ptr(buf, src.length());
+        }
+      }
+    }
+    return ret;
+  };
 
   if (OB_UNLIKELY((T_FILE_SCAN_TABLE != parse_tree.type_
                    && T_FILE_LIST_TABLE != parse_tree.type_
@@ -4155,10 +4186,11 @@ int ObDMLResolver::resolve_file_table_item(const ParseNode &parse_tree,
     ret = OB_ERR_TABLE_WITHOUT_ALIAS;
     LOG_WARN("file table requires an alias", K(ret), K(parse_tree.type_));
   } else if (T_CHAR != parse_tree.children_[0]->type_
-             && T_VARCHAR != parse_tree.children_[0]->type_) {
+             && T_VARCHAR != parse_tree.children_[0]->type_
+             && T_QUESTIONMARK != parse_tree.children_[0]->type_) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("file table path must be a string literal", K(ret), K(parse_tree.children_[0]->type_));
-  } else if (OB_FAIL(resolve_str_const(*parse_tree.children_[0], path))) {
+  } else if (OB_FAIL(resolve_file_string_arg(*parse_tree.children_[0], path))) {
     LOG_WARN("file table path must be a string literal", K(ret));
   } else if (path.empty()) {
     ret = OB_INVALID_ARGUMENT;
@@ -4166,12 +4198,13 @@ int ObDMLResolver::resolve_file_table_item(const ParseNode &parse_tree,
   } else if (T_FILE_SCAN_TABLE == parse_tree.type_
              && OB_NOT_NULL(parse_tree.children_[1])
              && T_CHAR != parse_tree.children_[1]->type_
-             && T_VARCHAR != parse_tree.children_[1]->type_) {
+             && T_VARCHAR != parse_tree.children_[1]->type_
+             && T_QUESTIONMARK != parse_tree.children_[1]->type_) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("file scan format must be a string literal", K(ret), K(parse_tree.children_[1]->type_));
   } else if (T_FILE_SCAN_TABLE == parse_tree.type_
              && OB_NOT_NULL(parse_tree.children_[1])
-             && OB_FAIL(resolve_str_const(*parse_tree.children_[1], format_name))) {
+             && OB_FAIL(resolve_file_string_arg(*parse_tree.children_[1], format_name))) {
     LOG_WARN("file scan format must be a string literal", K(ret));
   } else if (T_FILE_SCAN_TABLE == parse_tree.type_
              && OB_FAIL(ObFileScanUtils::parse_format(

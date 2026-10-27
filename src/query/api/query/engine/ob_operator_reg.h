@@ -516,8 +516,11 @@ REGISTER_OPERATOR(ObLogFunctionTable, PHY_FUNCTION_TABLE, ObFunctionTableSpec,
 class ObLogFileScan;
 class ObFileScanSpec;
 class ObFileScanOp;
+// NOTE: row-mode operator. The reference implementation of ObFileScanOp writes batch
+// results through ObExpr::locate_batch_datums(), whose frame layout does not match this
+// tree's vectorized engine, so the row interface (inner_get_next_row) is used instead.
 REGISTER_OPERATOR(ObLogFileScan, PHY_FILE_SCAN, ObFileScanSpec,
-                  ObFileScanOp, NOINPUT, VECTORIZED_OP);
+                  ObFileScanOp, NOINPUT);
 
 class ObLogStatCollector;
 class ObStatCollectorSpec;
