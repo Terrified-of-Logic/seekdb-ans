@@ -40,8 +40,7 @@
 #include "../../../src/sql/parser/sql_parser_mysql_mode_lex.h"
 #include "../../../src/sql/parser/sql_parser_base.h"
 
-#define GEN_EXPLAN_STMT(no_use, explain_stmt, explain_type, display_type, stmt, into_table, set_statement_id) \
-  (void)(no_use); \
+#define GEN_EXPLAN_STMT(desc_node, explain_stmt, explain_type, display_type, stmt, into_table, set_statement_id) \
   ParseNode *type_node = NULL; \
   ParseNode *display_node = NULL; \
   if (0 != explain_type) { \
@@ -51,7 +50,164 @@
     malloc_terminal_node(display_node, result->malloc_pool_, display_type); \
   } \
   malloc_non_terminal_node(explain_stmt, result->malloc_pool_, T_EXPLAIN, 5, \
-                           type_node, display_node, into_table, set_statement_id, stmt);
+                           type_node, display_node, into_table, set_statement_id, stmt); \
+  if (NULL != (desc_node) && 0 != (desc_node)->value_) { \
+    /* DESCRIBE SELECT: keep a T_INT(1) marker in the format-child slot, the \
+     * statement value_ field is reserved for the question mark counter. */ \
+    (explain_stmt)->children_[0] = (desc_node); \
+  }
+
+/* ---------------------------------------------------------------------------
+ * file sql table functions (file sql contract adaptation, P5):
+ *   read_csv(path [, name = literal ...])
+ *   read_json(path, format = 'newline_delimited')
+ *   read_ndjson(path), read_parquet(path), glob(path-with-wildcard)
+ * The function name arrives as a relation_name token (not a keyword).  The
+ * parse tree is normalized into a T_FILE_SCAN_TABLE node with 8 children:
+ *   [0] path literal
+ *   [1][2] first named argument (name, value)
+ *   [3][4] second named argument (name, value)
+ *   [5][6] third named argument (name, value)
+ *   [7] alias (NULL when omitted)
+ * node->value_ stores the function kind (FILE_SQL_FUNC_*).
+ * A positional argument after the path is rejected by the grammar itself,
+ * which yields 1064 as required by the contract (read_csv(path, 'xml')).
+ * --------------------------------------------------------------------------*/
+#define FILE_SQL_FUNC_READ_CSV 1
+#define FILE_SQL_FUNC_READ_JSON 2
+#define FILE_SQL_FUNC_READ_NDJSON 3
+#define FILE_SQL_FUNC_READ_PARQUET 4
+#define FILE_SQL_FUNC_GLOB 5
+
+#define FILE_SQL_ARG_HEADER 1
+#define FILE_SQL_ARG_SAMPLE_SIZE 2
+#define FILE_SQL_ARG_FORMAT 3
+
+static int file_sql_name_equal(const char *str, const int64_t len, const char *name)
+{
+  int equal = 1;
+  int64_t name_len = 0;
+  int64_t i = 0;
+  if (NULL == str || NULL == name) {
+    equal = 0;
+  } else {
+    name_len = (int64_t)strlen(name);
+    if (len != name_len) {
+      equal = 0;
+    } else {
+      for (i = 0; equal && i < len; ++i) {
+        char left = str[i];
+        char right = name[i];
+        if (left >= 'A' && left <= 'Z') {
+          left = (char)(left - 'A' + 'a');
+        }
+        if (right >= 'A' && right <= 'Z') {
+          right = (char)(right - 'A' + 'a');
+        }
+        if (left != right) {
+          equal = 0;
+        }
+      }
+    }
+  }
+  return equal;
+}
+
+static int file_sql_function_kind(const ParseNode *name_node)
+{
+  int kind = 0;
+  if (NULL != name_node && NULL != name_node->str_value_) {
+    if (file_sql_name_equal(name_node->str_value_, name_node->str_len_, "read_csv")) {
+      kind = FILE_SQL_FUNC_READ_CSV;
+    } else if (file_sql_name_equal(name_node->str_value_, name_node->str_len_, "read_json")) {
+      kind = FILE_SQL_FUNC_READ_JSON;
+    } else if (file_sql_name_equal(name_node->str_value_, name_node->str_len_, "read_ndjson")) {
+      kind = FILE_SQL_FUNC_READ_NDJSON;
+    } else if (file_sql_name_equal(name_node->str_value_, name_node->str_len_, "read_parquet")) {
+      kind = FILE_SQL_FUNC_READ_PARQUET;
+    } else if (file_sql_name_equal(name_node->str_value_, name_node->str_len_, "glob")) {
+      kind = FILE_SQL_FUNC_GLOB;
+    } else {
+      kind = 0;
+    }
+  }
+  return kind;
+}
+
+static int file_sql_named_arg_kind(const ParseNode *name_node)
+{
+  int kind = 0;
+  if (NULL != name_node && NULL != name_node->str_value_) {
+    if (file_sql_name_equal(name_node->str_value_, name_node->str_len_, "header")) {
+      kind = FILE_SQL_ARG_HEADER;
+    } else if (file_sql_name_equal(name_node->str_value_, name_node->str_len_, "sample_size")) {
+      kind = FILE_SQL_ARG_SAMPLE_SIZE;
+    } else if (file_sql_name_equal(name_node->str_value_, name_node->str_len_, "format")) {
+      kind = FILE_SQL_ARG_FORMAT;
+    } else {
+      kind = 0;
+    }
+  }
+  return kind;
+}
+
+static int file_sql_build_table_node(ParseNode **node,
+                                     ParseResult *result,
+                                     ParseNode *name_node,
+                                     ParseNode *path_node,
+                                     ParseNode *arg1,
+                                     ParseNode *arg2,
+                                     ParseNode *arg3)
+{
+  int ret = 0;
+  int i = 0;
+  int j = 0;
+  int kind = 0;
+  int arg_kinds[3] = {0, 0, 0};
+  ParseNode *args[3] = {arg1, arg2, arg3};
+  ParseNode *new_node = NULL;
+  if (NULL == node || NULL == result || NULL == path_node) {
+    ret = -1;
+  } else if (0 == (kind = file_sql_function_kind(name_node))) {
+    ret = -1;
+  }
+  for (i = 0; 0 == ret && i < 3; ++i) {
+    if (NULL == args[i]) {
+      /* absent named argument */
+    } else if (2 != args[i]->num_child_ || NULL == args[i]->children_
+               || NULL == args[i]->children_[0] || NULL == args[i]->children_[1]) {
+      ret = -1;
+    } else if (0 == (arg_kinds[i] = file_sql_named_arg_kind(args[i]->children_[0]))) {
+      ret = -1;
+    } else {
+      for (j = 0; 0 == ret && j < i; ++j) {
+        if (0 != arg_kinds[j] && arg_kinds[j] == arg_kinds[i]) {
+          ret = -1;
+        }
+      }
+    }
+  }
+  if (0 == ret) {
+    new_node = new_non_terminal_node(result->malloc_pool_,
+                                     T_FILE_SCAN_TABLE,
+                                     8,
+                                     path_node,
+                                     NULL != arg1 ? arg1->children_[0] : NULL,
+                                     NULL != arg1 ? arg1->children_[1] : NULL,
+                                     NULL != arg2 ? arg2->children_[0] : NULL,
+                                     NULL != arg2 ? arg2->children_[1] : NULL,
+                                     NULL != arg3 ? arg3->children_[0] : NULL,
+                                     NULL != arg3 ? arg3->children_[1] : NULL,
+                                     NULL);
+    if (NULL == new_node) {
+      ret = -1;
+    } else {
+      new_node->value_ = kind;
+      *node = new_node;
+    }
+  }
+  return ret;
+}
 %}
 
 %destructor {destroy_tree($$);}<node>
@@ -513,6 +669,8 @@ END_P SET_VAR DELIMITER
 %type <node> es_sql_opt
 %type <node> hybrid_search_expr hybrid_search_param
 %type <node> file_scan_expr file_list_expr file_schema_expr
+%type <node> file_sql_table_expr file_sql_call file_sql_named_arg
+%type <node> copy_stmt opt_copy_options copy_option_list copy_option
 %type <node> vector_similarity_expr vector_similarity_metric
 %type <node> algorithm_opt lock_opt
 %type <node> flush_privileges_stmt opt_flush_privileges_scope
@@ -584,6 +742,7 @@ stmt:
   | drop_table_stmt         { $$ = $1; check_question_mark($$, result); }
   | drop_view_stmt          { $$ = $1; check_question_mark($$, result); }
   | explain_stmt            { $$ = $1; question_mark_issue($$, result); }
+  | copy_stmt               { $$ = $1; question_mark_issue($$, result); }
   | create_outline_stmt     { $$ = $1; question_mark_issue($$, result); }
   | alter_outline_stmt      { $$ = $1; question_mark_issue($$, result); }
   | drop_outline_stmt       { $$ = $1; check_question_mark($$, result); }
@@ -10917,6 +11076,10 @@ tbl_name
 {
   $$ = $1;
 }
+| file_sql_table_expr
+{
+  $$ = $1;
+}
 ;
 
 tbl_name:
@@ -12374,9 +12537,21 @@ explain_or_desc relation_factor opt_desc_column_option
 ;
 
 explain_or_desc:
-EXPLAIN {$$ = NULL;}
-| DESCRIBE {$$ = NULL;}
-| DESC  {$$ = NULL;}
+EXPLAIN
+{
+  malloc_terminal_node($$, result->malloc_pool_, T_INT);
+  $$->value_ = 0;
+}
+| DESCRIBE
+{
+  malloc_terminal_node($$, result->malloc_pool_, T_INT);
+  $$->value_ = 1; /* DESCRIBE SELECT marker */
+}
+| DESC
+{
+  malloc_terminal_node($$, result->malloc_pool_, T_INT);
+  $$->value_ = 1; /* DESCRIBE SELECT marker */
+}
 ;
 
 explainable_stmt:
@@ -17620,6 +17795,125 @@ FILE_SCHEMA '(' literal ')'
 {
   malloc_non_terminal_node($$, result->malloc_pool_, T_FILE_SCHEMA_TABLE, 2, $3, $6);
 }
+;
+
+file_sql_table_expr:
+  file_sql_call %prec LOWER_PARENS
+  {
+    $$ = $1;
+  }
+| file_sql_call relation_name
+  {
+    $$ = $1;
+    $$->children_[7] = $2;
+  }
+| file_sql_call AS relation_name
+  {
+    $$ = $1;
+    $$->children_[7] = $3;
+  }
+;
+
+file_sql_call:
+  NAME_OB '(' literal ')'
+  {
+    if (0 != file_sql_build_table_node(&$$, result, $1, $3, NULL, NULL, NULL)) {
+      yyerror(&@1, result, "unsupported file sql table function");
+      YYERROR;
+    }
+  }
+| NAME_OB '(' literal ',' file_sql_named_arg ')'
+  {
+    if (0 != file_sql_build_table_node(&$$, result, $1, $3, $5, NULL, NULL)) {
+      yyerror(&@1, result, "unsupported file sql table function");
+      YYERROR;
+    }
+  }
+| NAME_OB '(' literal ',' file_sql_named_arg ',' file_sql_named_arg ')'
+  {
+    if (0 != file_sql_build_table_node(&$$, result, $1, $3, $5, $7, NULL)) {
+      yyerror(&@1, result, "unsupported file sql table function");
+      YYERROR;
+    }
+  }
+| NAME_OB '(' literal ',' file_sql_named_arg ',' file_sql_named_arg ',' file_sql_named_arg ')'
+  {
+    if (0 != file_sql_build_table_node(&$$, result, $1, $3, $5, $7, $9)) {
+      yyerror(&@1, result, "unsupported file sql table function");
+      YYERROR;
+    }
+  }
+;
+
+file_sql_named_arg:
+  relation_name COMP_EQ literal
+  {
+    malloc_non_terminal_node($$, result->malloc_pool_, T_LINK_NODE, 2, $1, $3);
+  }
+| relation_name COMP_EQ '-' literal
+  {
+    ParseNode *neg_node = NULL;
+    malloc_non_terminal_node(neg_node, result->malloc_pool_, T_OP_NEG, 1, $4);
+    malloc_non_terminal_node($$, result->malloc_pool_, T_LINK_NODE, 2, $1, neg_node);
+  }
+;
+
+copy_stmt:
+  COPY '(' select_stmt ')' TO literal opt_copy_options
+  {
+    /* reuses the T_EXPLAIN statement node as the COPY marker; children_[0]
+     * holds a T_INT(2) marker node and the statement is resolved by
+     * ObExplainResolver (see _work/file_sql/port/P5-summary.md). */
+    ParseNode *copy_marker = NULL;
+    malloc_non_terminal_node($$, result->malloc_pool_, T_EXPLAIN, 6,
+                             NULL, NULL, $6, NULL, $3, $7);
+    malloc_terminal_node(copy_marker, result->malloc_pool_, T_INT);
+    copy_marker->value_ = 2;
+    $$->children_[0] = copy_marker;
+  }
+;
+
+opt_copy_options:
+  /* empty */
+  {
+    $$ = NULL;
+  }
+| '(' copy_option_list ')'
+  {
+    $$ = $2;
+  }
+;
+
+copy_option_list:
+  copy_option
+  {
+    malloc_non_terminal_node($$, result->malloc_pool_, T_LINK_NODE, 2, NULL, $1);
+  }
+| copy_option_list ',' copy_option
+  {
+    malloc_non_terminal_node($$, result->malloc_pool_, T_LINK_NODE, 2, $1, $3);
+  }
+;
+
+copy_option:
+  relation_name
+  {
+    /* bare option such as "header" */
+    malloc_non_terminal_node($$, result->malloc_pool_, T_LINK_NODE, 2, NULL, $1);
+    $$->value_ = 2;
+  }
+| relation_name relation_name
+  {
+    /* name/value option such as "format csv" */
+    malloc_non_terminal_node($$, result->malloc_pool_, T_LINK_NODE, 2, $1, $2);
+    $$->value_ = 1;
+  }
+| relation_name literal
+  {
+    /* name/value option such as "nullstr 'NULL'" */
+    malloc_non_terminal_node($$, result->malloc_pool_, T_LINK_NODE, 2, $1, $2);
+    $$->value_ = 3;
+  }
 ;
 
 unreserved_keyword:

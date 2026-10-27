@@ -38,7 +38,7 @@ OB_SERIALIZE_MEMBER(ObSelectIntoOpInput, task_id_, sqc_id_);
 OB_SERIALIZE_MEMBER((ObSelectIntoSpec, ObOpSpec), into_type_, user_vars_, outfile_name_,
     field_str_, line_str_, closed_cht_, is_optional_, select_exprs_, is_single_, max_file_size_,
     escaped_cht_, cs_type_, parallel_, buffer_size_, is_overwrite_,
-    external_properties_);
+    external_properties_, write_header_, header_names_);
 
 
 int ObSelectIntoOp::inner_open()
@@ -199,6 +199,7 @@ int ObSelectIntoOp::inner_get_next_row()
   if (OB_SUCC(ret) && ObExternalFileFormat::FormatType::CSV_FORMAT == format_type_
       && T_INTO_VARIABLES != into_type
       && OB_FAIL(create_the_only_data_writer(data_writer))) {
+  } else if (OB_SUCC(ret) && OB_FAIL(write_header_if_needed(data_writer))) {
   }
   while (OB_SUCC(ret) && row_count < top_limit_cnt_) {
     clear_evaluated_flag();
@@ -253,6 +254,7 @@ int ObSelectIntoOp::inner_get_next_batch(const int64_t max_row_cnt)
     if (OB_FAIL(create_the_only_data_writer(data_writer))) {
     } else if (OB_ISNULL(data_writer)) {
       ret = OB_ERR_UNEXPECTED;
+    } else if (OB_FAIL(write_header_if_needed(data_writer))) {
     }
   }
 
@@ -319,6 +321,42 @@ int ObSelectIntoOp::inner_get_next_batch(const int64_t max_row_cnt)
 int ObSelectIntoOp::inner_rescan()
 {
   int ret = OB_SUCCESS;
+  return ret;
+}
+
+int ObSelectIntoOp::write_header_if_needed(ObExternalFileWriter *data_writer)
+{
+  int ret = OB_SUCCESS;
+  ObCsvFileWriter *csv_data_writer = NULL;
+  if (!MY_SPEC.write_header_ || header_written_) {
+    // nothing to do
+  } else if (OB_ISNULL(data_writer)) {
+    ret = OB_ERR_UNEXPECTED;
+  } else if (OB_ISNULL(csv_data_writer = static_cast<ObCsvFileWriter *>(data_writer))) {
+    ret = OB_ERR_UNEXPECTED;
+  } else if (MY_SPEC.header_names_.count() != select_exprs_count()) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("select into header size mismatch", K(ret), K(MY_SPEC.header_names_.count()));
+  } else {
+    for (int64_t i = 0; OB_SUCC(ret) && i < MY_SPEC.header_names_.count(); ++i) {
+      ObObj obj;
+      obj.set_varchar(MY_SPEC.header_names_.at(i));
+      obj.set_collation_type(cs_type_);
+      if (OB_FAIL(print_field(obj, *csv_data_writer))) {
+        LOG_WARN("failed to write select into header field", K(ret), K(i));
+      } else if (i != MY_SPEC.header_names_.count() - 1
+                 && OB_FAIL(write_obj_to_file(field_str_, *csv_data_writer))) {
+        LOG_WARN("failed to write select into header separator", K(ret), K(i));
+      }
+    }
+    if (OB_SUCC(ret) && OB_FAIL(write_obj_to_file(line_str_, *csv_data_writer))) {
+      LOG_WARN("failed to write select into header line terminator", K(ret));
+    } else if (OB_SUCC(ret) && OB_FAIL(csv_data_writer->flush_shared_buf(shared_buf_))) {
+      LOG_WARN("failed to flush select into header", K(ret));
+    } else if (OB_SUCC(ret)) {
+      header_written_ = true;
+    }
+  }
   return ret;
 }
 

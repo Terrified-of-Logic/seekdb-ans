@@ -5490,6 +5490,31 @@ int ObStaticEngineCG::generate_spec(ObLogSelectInto &op, ObSelectIntoSpec &spec,
       spec.is_overwrite_ = op.get_is_overwrite();
       spec.plan_->need_drive_dml_query_ = true;
     }
+    if (OB_SUCC(ret) && OB_NOT_NULL(op.get_stmt())) {
+      // file sql COPY ... TO (header): pass the result column names to the op
+      const ObSelectStmt *select_stmt = static_cast<const ObSelectStmt *>(op.get_stmt());
+      const ObSelectIntoItem *into_item = select_stmt->get_select_into();
+      spec.write_header_ = (NULL != into_item && into_item->write_header_);
+      if (spec.write_header_) {
+        const int64_t item_count = select_stmt->get_select_item_size();
+        if (OB_FAIL(spec.header_names_.init(item_count))) {
+          LOG_WARN("failed to init select into header names", K(ret));
+        }
+        for (int64_t i = 0; OB_SUCC(ret) && i < item_count; ++i) {
+          const SelectItem &select_item = select_stmt->get_select_item(i);
+          ObString header_name = select_item.alias_name_;
+          ObString copied_name;
+          if (header_name.empty()) {
+            header_name = select_item.expr_name_;
+          }
+          if (OB_FAIL(ob_write_string(alloc, header_name, copied_name))) {
+            LOG_WARN("failed to copy select into header name", K(ret), K(i));
+          } else if (OB_FAIL(spec.header_names_.push_back(copied_name))) {
+            LOG_WARN("failed to push select into header name", K(ret), K(i));
+          }
+        }
+      }
+    }
   }
   return ret;
 }

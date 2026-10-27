@@ -206,19 +206,26 @@ int ObFileScanOp::get_next_list_row()
     ObFileFormat format = ObFileFormat::INVALID;
     const bool queryable = S_ISREG(entry_stat.st_mode)
                            && OB_SUCCESS == ObFileScanUtils::detect_format(full_path, format);
-    cells_.assign(6, ObFileCell());
-    cells_[0].is_null_ = false;
-    cells_[0].string_value_ = entry->d_name;
-    cells_[1].is_null_ = false;
-    cells_[1].string_value_ = full_path;
-    cells_[2].is_null_ = false;
-    cells_[2].string_value_ = queryable ? ObFileScanUtils::format_name(format) : "unknown";
-    cells_[3].is_null_ = false;
-    cells_[3].int_value_ = static_cast<int64_t>(entry_stat.st_size);
-    cells_[4].is_null_ = false;
-    cells_[4].datetime_value_ = static_cast<int64_t>(entry_stat.st_mtime) * 1000000L;
-    cells_[5].is_null_ = false;
-    cells_[5].bool_value_ = queryable;
+    if (1 == file_spec().file_column_types_.count()) {
+      // DuckDB glob(): a single VARCHAR column holding the full file path
+      cells_.assign(1, ObFileCell());
+      cells_[0].is_null_ = false;
+      cells_[0].string_value_ = full_path;
+    } else {
+      cells_.assign(6, ObFileCell());
+      cells_[0].is_null_ = false;
+      cells_[0].string_value_ = entry->d_name;
+      cells_[1].is_null_ = false;
+      cells_[1].string_value_ = full_path;
+      cells_[2].is_null_ = false;
+      cells_[2].string_value_ = queryable ? ObFileScanUtils::format_name(format) : "unknown";
+      cells_[3].is_null_ = false;
+      cells_[3].int_value_ = static_cast<int64_t>(entry_stat.st_size);
+      cells_[4].is_null_ = false;
+      cells_[4].datetime_value_ = static_cast<int64_t>(entry_stat.st_mtime) * 1000000L;
+      cells_[5].is_null_ = false;
+      cells_[5].bool_value_ = queryable;
+    }
     break;
   }
   if (OB_SUCC(ret) && OB_ISNULL(entry)) {
