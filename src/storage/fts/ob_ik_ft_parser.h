@@ -54,6 +54,11 @@ public:
 
   int init(const ObFTParserParam &param);
 
+  // Rebind this parser to a new fulltext buffer, keeping the dictionaries and
+  // the processor chain that were built by init(). Only the tokenize context
+  // carries per-call state, so it is the only thing rebuilt here.
+  int reinit_ctx(const ObFTParserParam &param);
+
   int get_next_token(const char *&word,
                      int64_t &word_len,
                      int64_t &char_cnt,

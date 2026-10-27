@@ -18,6 +18,7 @@
 
 #include "src/storage/fts/ob_ik_ft_parser.h"
 
+#include "lib/allocator/page_arena.h"
 #include "lib/charset/ob_charset.h"
 #include "lib/ob_errno.h"
 #include "lib/oblog/ob_log_module.h"
@@ -190,6 +191,95 @@ int ObIKFTParser::process_next_batch()
   return ret;
 }
 
+namespace
+{
+// Building an IK parser allocates the parser object, two dictionary objects
+// over freshly loaded dictionary caches, four processors and a tokenize
+// context -- then tears all of it down after a single document. Only the
+// context depends on the input text, so keep one parser alive per thread and
+// rebind just the context (see ObIKFTParser::reinit_ctx).
+//
+// Reusing the dictionaries stays consistent with a fresh build: ObFTDictHub has
+// no runtime invalidation path, and ObDicLoader::try_load_dictionary_in_trans
+// only does work on its first call, so every parser observes the same dictionary
+// ranges for the lifetime of the process.
+struct ObIKParserPool
+{
+  ObIKParserPool() = default;
+  ~ObIKParserPool()
+  {
+    if (nullptr != parser_) {
+      parser_->~ObIKFTParser();
+      allocator_.free(parser_);
+      parser_ = nullptr;
+    }
+  }
+
+  common::ObArenaAllocator allocator_;
+  ObIKFTParser *parser_ = nullptr;
+  ObFTDictHub *hub_ = nullptr;
+  ObCollationType coll_type_ = common::CS_TYPE_INVALID;
+  int64_t parser_version_ = -1;
+  bool in_use_ = false;
+};
+
+thread_local ObIKParserPool tl_ik_parser_pool;
+
+int acquire_ik_parser(ObFTParserParam *param, ObFTDictHub *hub, ObIKFTParser *&parser)
+{
+  int ret = OB_SUCCESS;
+  ObIKParserPool &pool = tl_ik_parser_pool;
+  parser = nullptr;
+  if (nullptr == param || nullptr == param->cs_ || nullptr == param->cs_->name) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (pool.in_use_ && nullptr != pool.parser_) {
+    // A nested call must not disturb the parser that is still in flight, so it
+    // gets a private, short-lived one.
+    ObIKFTParser *temp = nullptr;
+    if (OB_ISNULL(temp = OB_NEWx(ObIKFTParser, param->allocator_, *(param->allocator_), hub))) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+    } else if (OB_FAIL(temp->init(*param))) {
+      OB_DELETEx(ObIKFTParser, param->allocator_, temp);
+    } else {
+      parser = temp;
+    }
+  } else {
+    const ObCollationType coll_type = ObCharset::collation_type(param->cs_->name);
+    if (nullptr != pool.parser_ && pool.hub_ == hub && pool.coll_type_ == coll_type
+        && pool.parser_version_ == param->parser_version_) {
+      if (OB_FAIL(pool.parser_->reinit_ctx(*param))) {
+        // fall through and rebuild from scratch
+      } else {
+        pool.in_use_ = true;
+        parser = pool.parser_;
+      }
+    }
+    if (OB_FAIL(ret) || nullptr == parser) {
+      ret = OB_SUCCESS;
+      if (nullptr != pool.parser_) {
+        pool.parser_->~ObIKFTParser();
+        pool.allocator_.free(pool.parser_);
+        pool.parser_ = nullptr;
+      }
+      if (OB_ISNULL(pool.parser_ = OB_NEWx(ObIKFTParser, &pool.allocator_, pool.allocator_, hub))) {
+        ret = OB_ALLOCATE_MEMORY_FAILED;
+      } else if (OB_FAIL(pool.parser_->init(*param))) {
+        pool.parser_->~ObIKFTParser();
+        pool.allocator_.free(pool.parser_);
+        pool.parser_ = nullptr;
+      } else {
+        pool.hub_ = hub;
+        pool.coll_type_ = coll_type;
+        pool.parser_version_ = param->parser_version_;
+        pool.in_use_ = true;
+        parser = pool.parser_;
+      }
+    }
+  }
+  return ret;
+}
+} // namespace
+
 int ObIKFTParserDesc::segment(ObFTParserParam *param, ObITokenIterator *&iter) const
 {
   int ret = OB_SUCCESS;
@@ -198,25 +288,25 @@ int ObIKFTParserDesc::segment(ObFTParserParam *param, ObITokenIterator *&iter) c
   if (OB_ISNULL(param) || OB_UNLIKELY(!param->is_valid())) {
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(ObFTParseData::instance().get_dict_hub(hub))) {
-  } else if (OB_ISNULL(parser = OB_NEWx(ObIKFTParser, param->allocator_, *(param->allocator_), hub))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-  } else if (OB_FAIL(parser->init(*param))) {
+  } else if (OB_FAIL(acquire_ik_parser(param, hub, parser))) {
   } else {
     iter = parser;
   }
-
-  if (OB_FAIL(ret)) {
-    OB_DELETEx(ObIKFTParser, param->allocator_, parser);
-  }
-
   return ret;
 }
 
 void ObIKFTParserDesc::free_token_iter(ObFTParserParam *param,
                                        ObITokenIterator *&iter) const
 {
-  iter->~ObITokenIterator();
-  param->allocator_->free(iter);
+  if (nullptr == iter) {
+    // nothing to release
+  } else if (iter == tl_ik_parser_pool.parser_) {
+    tl_ik_parser_pool.in_use_ = false;
+  } else {
+    iter->~ObITokenIterator();
+    param->allocator_->free(iter);
+  }
+  iter = nullptr;
 }
 
 
@@ -299,6 +389,29 @@ int ObIKFTParser::init_ctx(const ObFTParserParam &param)
   }
   if (OB_FAIL(ret)) {
     OB_DELETEx(TokenizeContext, &allocator_, ctx_);
+  }
+  return ret;
+}
+
+int ObIKFTParser::reinit_ctx(const ObFTParserParam &param)
+{
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(!is_inited_)) {
+    ret = OB_NOT_INIT;
+  } else if (OB_ISNULL(param.cs_) || OB_ISNULL(param.cs_->name)) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (coll_type_ != ObCharset::collation_type(param.cs_->name)) {
+    ret = OB_INVALID_ARGUMENT;
+  } else {
+    if (!OB_ISNULL(ctx_)) {
+      ctx_->~TokenizeContext();
+      allocator_.free(ctx_);
+      ctx_ = nullptr;
+    }
+    if (OB_FAIL(init_ctx(param))) {
+      // init_ctx already released ctx_ on failure. The dictionaries and the
+      // processor chain do not depend on the input text, so they stay usable.
+    }
   }
   return ret;
 }
