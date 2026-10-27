@@ -227,6 +227,10 @@ public:
 public:
   int open_inner_conn();
   int close_inner_conn();
+  // Lazily open the inner (nested SQL) connection when needed, e.g. AI column
+  // task maintenance which is not planned as a nested SQL statement.
+  int ensure_inner_conn();
+  ObIInnerSQLConnection *get_inner_conn() { return inner_conn_; }
   int begin_nested_session(bool skip_cur_stmt_tables);
   int end_nested_session();
   int execute_write(const char *sql);
@@ -238,7 +242,14 @@ public:
   bool has_before_row_trigger(const ObDMLBaseCtDef &dml_ctdef) { return dml_ctdef.is_primary_index_ && dml_ctdef.trig_ctdef_.all_tm_points_.has_before_row(); }
   bool has_after_row_trigger(const ObDMLBaseCtDef &dml_ctdef) { return dml_ctdef.is_primary_index_ && dml_ctdef.trig_ctdef_.all_tm_points_.has_after_row(); }
   bool need_foreign_key_check(const ObDMLBaseCtDef &dml_ctdef) { return dml_ctdef.is_primary_index_ && dml_ctdef.fk_args_.count() > 0; }
-  bool need_after_row_process(const ObDMLBaseCtDef &dml_ctdef) { return need_foreign_key_check(dml_ctdef) || has_after_row_trigger(dml_ctdef); }
+  bool need_after_row_process(const ObDMLBaseCtDef &dml_ctdef)
+  {
+    return need_foreign_key_check(dml_ctdef) || has_after_row_trigger(dml_ctdef)
+           || need_ai_column_process(dml_ctdef);
+  }
+  // whether the target table has AI columns (hidden __ai_state_* columns);
+  // cached per operator because it is queried for every row.
+  bool need_ai_column_process(const ObDMLBaseCtDef &dml_ctdef);
   void set_execute_single_row() { execute_single_row_ = true; }
   void unset_execute_single_row() { execute_single_row_ = false; }
   bool get_execute_single_row() const { return execute_single_row_; }
@@ -304,6 +315,9 @@ public:
   ObIInnerSQLConnection::SavedValue saved_conn_;
   bool need_foreign_key_check_;
   bool need_close_conn_;
+  // AI column detection cache (table_id -> result)
+  int64_t ai_column_check_table_id_;
+  bool ai_column_check_result_;
 
   ObObjPrintParams obj_print_params_;
   bool iter_end_;

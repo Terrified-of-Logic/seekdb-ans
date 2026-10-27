@@ -22,6 +22,7 @@
 #include "share/autoincrement/ob_i_tablet_autoincrement_admin.h"
 #include "share/ob_autoincrement_service.h"
 #include "share/ob_rpc_struct.h"
+#include "share/ai_column/ob_ai_column_metadata_util.h"
 #include "share/rc/ob_server_runtime.h"
 #include "share/schema/ob_schema_service.h"
 #include "share/schema/ob_table_sql_service.h"
@@ -424,6 +425,13 @@ int ObDropTableHelper::operate_schemas_()
         } else {
           if (OB_FAIL(drop_table_(*table_schema, &ddl_stmt_str))) {
           }
+        }
+      }
+
+      // ai column metadata cleanup
+      if (OB_SUCC(ret) && !table_schema->is_aux_table()) {
+        if (OB_FAIL(share::ObAIColumnMetadataUtil::delete_ai_columns(
+                      get_trans_(), static_cast<int64_t>(table_schema->get_table_id())))) {
         }
       }
 

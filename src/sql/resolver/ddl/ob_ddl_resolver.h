@@ -24,6 +24,7 @@
 #include "share/ob_rpc_struct.h"
 #include "share/schema/ob_schema_struct.h"
 #include "common/sql_mode/ob_sql_mode.h"
+#include "share/ai_column/ob_ai_column_struct.h"
 #include "sql/resolver/ddl/ob_table_stmt.h"
 #include "sql/resolver/ddl/ob_alter_table_stmt.h"
 #include "sql/resolver/ddl/ob_create_index_stmt.h"
@@ -518,6 +519,39 @@ protected:
       const bool unused_flag = false,
       const bool is_create_table_as = false,
       const bool allow_has_default = true);
+  // ---- AI column support ----
+  // Resolve one `... AI COLUMN (<ai func expr>) [WITH (...)]` column definition.
+  // Called after all column schemas of the statement are built, so that the AI
+  // function expression can reference any ordinary column of the table.
+  int resolve_ai_column_definition(
+      const share::schema::ObTableSchema &table_schema,
+      share::schema::ObColumnSchemaV2 &column,
+      ParseNode *column_definition_node,
+      const common::ObIArray<common::ObString> &ai_column_names,
+      share::ObAIColumnSchema &ai_column,
+      bool &is_ai_column);
+  int resolve_ai_column_with_options(
+      ParseNode *options_node,
+      share::ObAIColumnSchema &ai_column);
+  static int collect_ai_column_name(
+      const ParseNode *column_definition_node,
+      common::ObIArray<common::ObString> &ai_column_names);
+  static int get_ai_column_names_from_table_schema(
+      const share::schema::ObTableSchema &table_schema,
+      common::ObIArray<common::ObString> &ai_column_names);
+  // Rewrite the unquoted `status` pseudo column of a RETRY predicate into
+  // json_extract(`<hidden state column>`, '$.state'); quoted `status` is kept.
+  static int rewrite_ai_retry_status_predicate(
+      common::ObIAllocator &allocator,
+      const common::ObString &predicate,
+      const common::ObString &state_column_name,
+      common::ObString &rewritten_predicate);
+  // Build one hidden AI column (state/request/result_spec, JSON, hidden, nullable).
+  // The column id is assigned by the caller (CREATE) or by rootserver (ALTER).
+  static int build_ai_hidden_column(
+      const common::ObString &result_column_name,
+      const common::ObString &prefix,
+      share::schema::ObColumnSchemaV2 &column);
   int drop_not_null_constraint(const share::schema::ObColumnSchemaV2 &column);
   int resolve_normal_column_attribute_constr_not_null(ObColumnSchemaV2 &column,
                                                       ParseNode *attrs_node,

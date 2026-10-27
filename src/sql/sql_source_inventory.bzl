@@ -300,6 +300,7 @@ SQL_UNITY_GROUPS = [
         language = "c++",
         srcs = [
             "src/sql/engine/cmd/ob_table_executor.cpp",
+            "src/sql/engine/cmd/ob_ai_column_retry_executor.cpp",
             "src/sql/engine/cmd/ob_tcl_executor.cpp",
             "src/sql/engine/cmd/ob_trigger_executor.cpp",
             "src/sql/engine/cmd/ob_user_cmd_executor.cpp",
@@ -319,6 +320,7 @@ SQL_UNITY_GROUPS = [
             "src/sql/engine/dml/ob_conflict_checker.cpp",
             "src/sql/engine/dml/ob_dml_ctx_define.cpp",
             "src/sql/engine/dml/ob_dml_service.cpp",
+            "src/sql/engine/dml/ob_ai_column_dml_handler.cpp",
             "src/sql/engine/dml/ob_table_delete_op.cpp",
             "src/sql/engine/dml/ob_table_insert_op.cpp",
             "src/sql/engine/dml/ob_table_insert_up_op.cpp",
@@ -1333,6 +1335,7 @@ SQL_UNITY_GROUPS = [
         language = "c++",
         srcs = [
             "src/sql/resolver/ob_resolver.cpp",
+            "src/sql/resolver/ob_ai_column_strict_resolver.cpp",
             "src/sql/resolver/ob_resolver_utils.cpp",
             "src/sql/resolver/ob_schema_checker.cpp",
             "src/sql/resolver/ob_stmt.cpp",

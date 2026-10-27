@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_RESV
 #include "sql/resolver/ddl/ob_create_table_resolver.h"
+#include "share/ai_column/ob_ai_column_define.h"
 #include "sql/resolver/dml/ob_select_resolver.h"
 #include "sql/resolver/ddl/ob_fts_index_builder_util.h"
 #include "sql/rewrite/ob_transform_utils.h"
@@ -633,6 +634,10 @@ int ObCreateTableResolver::resolve_table_elements(const ParseNode *node,
     // Store the column schema after resolve_column_definition in resolved_cols
     // To support generating columns in any order, all column_schema are generated first and then uniformly stored in table_schema
     ObSEArray<ObColumnSchemaV2, SEARRAY_INIT_NUM> resolved_cols;
+    // AI column bookkeeping: names are collected in the first pass so that
+    // forward references can be checked before the AI definitions are resolved.
+    ObSEArray<share::ObAIColumnSchema, 4> ai_columns;
+    ObSEArray<common::ObString, 4> ai_column_names;
     // Resolve column names with the runtime name-case mode.
     //RESOLVE_NON_COL needs to add the columns in the query to stats in order to resolve PK constraint information etc.
     if (OB_FAIL(ret)) {
@@ -663,6 +668,7 @@ int ObCreateTableResolver::resolve_table_elements(const ParseNode *node,
         }
         if (OB_FAIL(ret)) {
         } else if (OB_FAIL(resolve_column_name(column, element))) {
+        } else if (OB_FAIL(collect_ai_column_name(element, ai_column_names))) {
         } else {
           OZ (resolved_cols.push_back(column));
         }
@@ -892,6 +898,62 @@ int ObCreateTableResolver::resolve_table_elements(const ParseNode *node,
           ObColumnNameHashWrapper name_key(hidden_col.get_column_name_str());
           if (OB_FAIL(column_name_set_.set_refactored(name_key))) {
           }
+        }
+      }
+    }
+
+    // Resolve AI columns after all column schemas are ready (any order references
+    // between ordinary columns are allowed), then inject their 3 hidden columns.
+    if (OB_SUCC(ret) && !ai_column_names.empty()) {
+      for (int32_t i = 0; OB_SUCC(ret) && i < node->num_child_; ++i) {
+        ParseNode *element = node->children_[i];
+        if (OB_ISNULL(element) || T_COLUMN_DEFINITION != element->type_) {
+          continue;
+        }
+        ParseNode *col_ref = element->children_[0];
+        ParseNode *name_node = (OB_NOT_NULL(col_ref) && col_ref->num_child_ > COLUMN_NAME_NODE)
+                                   ? col_ref->children_[COLUMN_NAME_NODE]
+                                   : NULL;
+        ObColumnSchemaV2 *ai_col = NULL;
+        bool is_ai_column = false;
+        share::ObAIColumnSchema ai_column;
+        if (OB_ISNULL(name_node)) {
+          ret = OB_ERR_UNEXPECTED;
+        } else if (OB_ISNULL(ai_col = table_schema.get_column_schema(
+                       common::ObString(name_node->str_len_, name_node->str_value_)))) {
+          ret = OB_ERR_UNEXPECTED;
+        } else if (OB_FAIL(resolve_ai_column_definition(table_schema, *ai_col, element,
+                                                        ai_column_names, ai_column,
+                                                        is_ai_column))) {
+        } else if (!is_ai_column) {
+          // ordinary column
+        } else if (OB_FAIL(ai_columns.push_back(ai_column))) {
+        } else {
+          const common::ObString &result_column_name = ai_col->get_column_name_str();
+          const char *hidden_prefixes[3] = {OB_AI_COLUMN_STATE_PREFIX,
+                                            OB_AI_COLUMN_REQUEST_PREFIX,
+                                            OB_AI_COLUMN_RESULT_SPEC_PREFIX};
+          for (int64_t k = 0; OB_SUCC(ret) && k < 3; ++k) {
+            ObColumnSchemaV2 hidden_col;
+            if (OB_FAIL(build_ai_hidden_column(
+                          result_column_name,
+                          common::ObString::make_string(hidden_prefixes[k]),
+                          hidden_col))) {
+            } else if (FALSE_IT(hidden_col.set_column_id(gen_column_id()))) {
+            } else if (OB_FAIL(table_schema.add_column(hidden_col))) {
+            } else {
+              ObColumnNameHashWrapper name_key(hidden_col.get_column_name_str());
+              if (OB_FAIL(column_name_set_.set_refactored(name_key))) {
+              }
+            }
+          }
+        }
+      }
+      if (OB_SUCC(ret) && !ai_columns.empty()) {
+        obcall::ObCreateTableArg &create_table_arg =
+            create_table_stmt->get_create_table_arg();
+        for (int64_t i = 0; OB_SUCC(ret) && i < ai_columns.count(); ++i) {
+          OZ (create_table_arg.ai_columns_.push_back(ai_columns.at(i)));
         }
       }
     }

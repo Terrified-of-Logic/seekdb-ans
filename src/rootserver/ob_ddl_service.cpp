@@ -20,6 +20,7 @@
 #include "config_bridge.h"
 #include <algorithm>
 #include "rootserver/ob_dependency_ddl_helper.h"
+#include "share/ai_column/ob_ai_column_metadata_util.h"
 #include "share/ob_sys_time_zone_util.h"
 
 #include "ob_ddl_service.h"
@@ -10441,6 +10442,22 @@ int ObDDLService::alter_table_in_trans(obcall::ObAlterTableArg &alter_table_arg,
                                                 ddl_operator,
                                                 trans,
                                                 &global_idx_schema_array))) {
+          }
+        }
+        // ai column metadata (ALTER TABLE ... ADD COLUMN ... AI COLUMN)
+        if (OB_SUCC(ret) && !alter_table_arg.ai_columns_.empty()) {
+          common::ObSEArray<share::ObAIColumnSchema, 4> ai_columns;
+          if (OB_FAIL(ai_columns.assign(alter_table_arg.ai_columns_))) {
+          } else if (OB_FAIL(share::ObAIColumnMetadataUtil::resolve_columns_by_name(
+                         new_table_schema, ai_columns))) {
+          } else if (OB_FAIL(share::ObAIColumnMetadataUtil::write_ai_columns(trans, ai_columns))) {
+          }
+        }
+
+        // ai column metadata cleanup (ALTER TABLE ... DROP COLUMN <ai_column>)
+        if (OB_SUCC(ret) && alter_table_arg.is_alter_columns_) {
+          if (OB_FAIL(share::ObAIColumnMetadataUtil::cleanup_dropped_ai_columns(
+                         trans, *sql_proxy_, new_table_schema))) {
           }
         }
         //table options

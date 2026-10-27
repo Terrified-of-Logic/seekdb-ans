@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_RESV
 #include "sql/resolver/ob_resolver.h"
+#include "sql/resolver/ob_ai_column_strict_resolver.h"
 #include "lib/utility/ob_smart_call.h"
 #include "lib/stat/ob_diagnostic_info_guard.h"
 #include "sql/resolver/cmd/ob_alter_system_resolver.h"
@@ -679,7 +680,21 @@ int ObResolver::resolve(IsPrepared if_prepared, const ParseNode &parse_tree, ObS
       }
     }
   }  // end if
+  // AI column strict read check: reject the statement before it touches any row
+  // when a referenced AI column is not fully ready (column wide, see contract 5.3).
+  if (OB_SUCC(ret) && OB_NOT_NULL(stmt)) {
+    stmt::StmtType check_type = stmt->get_stmt_type();
+    if (stmt::T_SELECT == check_type || stmt::T_UPDATE == check_type
+        || stmt::T_DELETE == check_type) {
+      if (OB_FAIL(ObAIColumnStrictResolver::check_strict_read(
+                    params_, *static_cast<ObDMLStmt *>(stmt)))) {
+        SQL_LOG(WARN, "ai column strict read check failed", K(ret));
+      }
+    }
+  }
   return ret;
+
+
 }
 
 }  // namespace sql

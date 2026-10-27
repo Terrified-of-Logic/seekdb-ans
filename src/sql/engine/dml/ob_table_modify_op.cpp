@@ -17,6 +17,10 @@
 #define USING_LOG_PREFIX SQL_ENG
 
 #include "ob_table_modify_op.h"
+#include "share/ai_column/ob_ai_column_define.h"
+#include "share/schema/ob_schema_getter_guard.h"
+#include "share/schema/ob_table_schema.h"
+#include "sql/ob_sql_context.h"
 #include "share/ob_autoincrement_service.h"
 #include "query/session/ob_inner_sql_connection_access.h"
 #include "sql/engine/ob_physical_plan.h"
@@ -618,6 +622,8 @@ ObTableModifyOp::ObTableModifyOp(ObExecContext &ctx,
     saved_conn_(),
     need_foreign_key_check_(false),
     need_close_conn_(false),
+    ai_column_check_table_id_(-1),
+    ai_column_check_result_(false),
     iter_end_(false),
     dml_rtctx_(eval_ctx_, ctx, *this),
     execute_single_row_(false),
@@ -631,6 +637,43 @@ ObTableModifyOp::ObTableModifyOp(ObExecContext &ctx,
   // in NO_BACKSLASH_ESCAPES, obj_print_sql<ObVarcharType> won't escape.
   // We use skip_escape_ to indicate this case. It will finally be passed to ObHexEscapeSqlStr.
   GET_SQL_MODE_BIT(IS_NO_BACKSLASH_ESCAPES, ctx_.get_my_session()->get_sql_mode(), obj_print_params_.skip_escape_);
+}
+
+bool ObTableModifyOp::need_ai_column_process(const ObDMLBaseCtDef &dml_ctdef)
+{
+  bool result = false;
+  const int64_t table_id = static_cast<int64_t>(dml_ctdef.das_base_ctdef_.index_tid_);
+  if (!dml_ctdef.is_primary_index_ || OB_INVALID_ID == table_id) {
+    result = false;
+  } else if (table_id == ai_column_check_table_id_) {
+    result = ai_column_check_result_;
+  } else {
+    const share::schema::ObTableSchema *table_schema = NULL;
+    share::schema::ObSchemaGetterGuard *schema_guard = NULL;
+    if (OB_NOT_NULL(ctx_.get_sql_ctx())) {
+      schema_guard = ctx_.get_sql_ctx()->schema_guard_;
+    }
+    if (OB_NOT_NULL(schema_guard)
+        && OB_SUCCESS == schema_guard->get_table_schema(static_cast<uint64_t>(table_id),
+                                                        table_schema)
+        && OB_NOT_NULL(table_schema)) {
+      for (int64_t i = 0; !result && i < table_schema->get_column_count(); ++i) {
+        const share::schema::ObColumnSchemaV2 *column =
+            table_schema->get_column_schema_by_idx(i);
+        if (OB_NOT_NULL(column) && column->is_hidden()) {
+          const common::ObString &column_name = column->get_column_name_str();
+          const int64_t prefix_len =
+              static_cast<int64_t>(strlen(share::OB_AI_COLUMN_STATE_PREFIX));
+          result = (column_name.length() >= prefix_len
+                    && 0 == strncmp(column_name.ptr(), share::OB_AI_COLUMN_STATE_PREFIX,
+                                    prefix_len));
+        }
+      }
+    }
+    ai_column_check_table_id_ = table_id;
+    ai_column_check_result_ = result;
+  }
+  return result;
 }
 
 int ObTableModifyOp::inner_open()
@@ -907,6 +950,15 @@ int ObTableModifyOp::calc_single_table_loc()
       get_input()->table_loc_ = table_loc;
       get_input()->tablet_loc_ = table_loc->get_first_tablet_loc();
     }
+  }
+  return ret;
+}
+
+int ObTableModifyOp::ensure_inner_conn()
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(inner_conn_)) {
+    ret = open_inner_conn();
   }
   return ret;
 }

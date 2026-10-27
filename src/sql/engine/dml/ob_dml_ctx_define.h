@@ -17,6 +17,7 @@
 #ifndef DEV_SRC_SQL_ENGINE_DML_OB_DML_CTX_DEFINE_H_
 #define DEV_SRC_SQL_ENGINE_DML_OB_DML_CTX_DEFINE_H_
 #include "sql/das/ob_das_dml_ctx_define.h"
+#include "share/ai_column/ob_ai_column_struct.h"
 #include "sql/das/ob_das_ref.h"
 #include "sql/das/ob_das_scan_op.h"
 namespace oceanbase
@@ -474,13 +475,19 @@ struct ObDMLBaseRtDef
   //some modules to access the das rtdef
   ObDASDMLBaseRtDef &das_base_rtdef_;
   FkCheckerArray fk_checker_array_;
+  // AI column metadata cache of the current DML statement (not serialized).
+  bool ai_columns_loaded_;
+  common::ObArenaAllocator ai_column_allocator_;
+  common::ObSEArray<share::ObAIColumnSchema, 4> ai_columns_;
 protected:
   ObDMLBaseRtDef(ObDASDMLBaseRtDef &das_base_rtdef)
     : trig_rtdef_(),
       cur_row_num_(0),
       check_location_(nullptr),
       check_row_(nullptr),
-      das_base_rtdef_(das_base_rtdef)
+      das_base_rtdef_(das_base_rtdef),
+      ai_columns_loaded_(false),
+      ai_columns_()
   { }
 };
 
