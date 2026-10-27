@@ -24,6 +24,7 @@
 #include "sql/engine/ob_physical_plan.h"
 #include "sql/das/ob_das_attach_define.h"
 #include "sql/das/ob_das_vec_define.h"
+#include "sql/das/ob_das_ir_define.h"
 #include "share/geo/ob_geo_utils.h"
 #include "share/ob_ddl_checksum.h"
 #include "share/geo/ob_srs_provider.h"
@@ -679,6 +680,8 @@ ObTableScanOp::ObTableScanOp(ObExecContext &exec_ctx, const ObOpSpec &spec, ObOp
     in_rescan_(false),
     domain_index_(),
     fts_index_(),
+    fts_output_exprs_{nullptr, nullptr, nullptr, nullptr},
+    fts_doc_active_(false),
     output_   (nullptr),
     fold_iter_(nullptr),
     iter_tree_(nullptr),
@@ -1007,6 +1010,46 @@ int ObTableScanOp::init_attach_scan_rtdef(const ObDASBaseCtDef *attach_ctdef,
   return ret;
 }
 
+// Reject every attach operator that could remove, reorder or combine rows.
+// The one eligible IR stream may stop after limit+offset documents; individual
+// posting scans must remain unbounded for a correct multi-token union.
+static int find_bounded_fts_stream(const ObDASBaseCtDef *ctdef,
+                                   ObDASBaseRtDef *rtdef,
+                                   ObDASIRScanRtDef *&stream,
+                                   bool &eligible)
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(ctdef) || OB_ISNULL(rtdef)) {
+    eligible = false;
+  } else if (ctdef->op_type_ == DAS_OP_IR_SCAN) {
+    const auto *ir = static_cast<const ObDASIRScanCtDef *>(ctdef);
+    if (OB_NOT_NULL(stream) || ir->need_calc_relevance() || ir->has_pushdown_topk()
+        || OB_NOT_NULL(ir->match_filter_) || ir->mode_flag_ != NATURAL_LANGUAGE_MODE) {
+      eligible = false;
+    } else {
+      stream = static_cast<ObDASIRScanRtDef *>(rtdef);
+    }
+  } else if (ctdef->op_type_ == DAS_OP_TABLE_SCAN) {
+    const auto *scan = static_cast<const ObDASScanCtDef *>(ctdef);
+    const auto *scan_rtdef = static_cast<const ObDASScanRtDef *>(rtdef);
+    if (!scan->pd_expr_spec_.pushdown_filters_.empty() || OB_NOT_NULL(scan_rtdef->sample_info_)) {
+      eligible = false;
+    }
+  } else if (ctdef->op_type_ != DAS_OP_INDEX_PROJ_LOOKUP
+             && ctdef->op_type_ != DAS_OP_IR_AUX_LOOKUP) {
+    eligible = false;
+  }
+  for (int64_t i = 0; OB_SUCC(ret) && eligible && OB_NOT_NULL(ctdef)
+      && i < ctdef->children_cnt_; ++i) {
+    if (i >= rtdef->children_cnt_) {
+      eligible = false;
+    } else if (OB_FAIL(SMART_CALL(find_bounded_fts_stream(
+                   ctdef->children_[i], rtdef->children_[i], stream, eligible)))) {
+    }
+  }
+  return ret;
+}
+
 int ObTableScanOp::init_table_scan_rtdef()
 {
   int ret = OB_SUCCESS;
@@ -1065,6 +1108,21 @@ int ObTableScanOp::init_table_scan_rtdef()
       if (OB_FAIL(tsc_rtdef_.attach_rtinfo_->pushdown_tasks_.push_back(
           tsc_rtdef_.attach_rtinfo_->attach_rtdef_))) {
       }
+    }
+  }
+  if (OB_SUCC(ret) && limit_param_.is_valid() && limit_param_.limit_ > 0
+      && limit_param_.offset_ >= 0 && limit_param_.offset_ <= INT64_MAX - limit_param_.limit_
+      && !MY_SPEC.use_dist_das_ && !MY_SPEC.gi_above_ && !MY_SPEC.batch_scan_flag_
+      && OB_ISNULL(MY_CTDEF.das_dppr_tbl_) && MY_SPEC.filters_.empty()
+      && tsc_rtdef_.scan_rtdef_.table_loc_->get_tablet_locs().size() == 1
+      && OB_NOT_NULL(tsc_rtdef_.attach_rtinfo_)) {
+    bool eligible = true;
+    ObDASIRScanRtDef *stream = nullptr;
+    if (OB_FAIL(find_bounded_fts_stream(MY_CTDEF.attach_spec_.attach_ctdef_,
+          tsc_rtdef_.attach_rtinfo_->attach_rtdef_, stream, eligible))) {
+    } else if (eligible && OB_NOT_NULL(stream)) {
+      stream->retrieval_limit_.limit_ = limit_param_.limit_ + limit_param_.offset_;
+      stream->retrieval_limit_.offset_ = 0;
     }
   }
   return ret;
@@ -1439,6 +1497,7 @@ int ObTableScanOp::inner_open()
   } else if (OB_FAIL(init_table_scan_rtdef())) {
   } else if (MY_SPEC.is_fts_ddl_ && OB_FAIL(fts_index_.init(MY_SPEC.is_fts_index_aux_, MY_SPEC.parser_name_,
           MY_SPEC.parser_properties_))) {
+  } else if (MY_SPEC.is_fts_ddl_ && OB_FAIL(init_fts_batch_exprs())) {
   } else {
     if (MY_SPEC.report_col_checksum_) {
       if (PHY_TABLE_SCAN == MY_SPEC.get_type()) {
@@ -1515,6 +1574,7 @@ int ObTableScanOp::inner_close()
   }
   if (OB_SUCC(ret)) {
     fts_index_.reuse();
+    fts_doc_active_ = false;
     iter_end_ = false;
     need_init_before_get_row_ = true;
     rand_scan_processor_.reset();
@@ -2199,7 +2259,9 @@ ERRSIM_POINT_DEF(EN_TABLE_SCAN_RETRY_WAIT_EVENT_ERRSIM);
 int ObTableScanOp::inner_get_next_batch(const int64_t max_row_cnt)
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(rand_scan_processor_.use_rand_scan())) {
+  if (MY_SPEC.is_fts_ddl_ && OB_ISNULL(tsc_rtdef_.scan_rtdef_.sample_info_)) {
+    ret = inner_get_next_fts_index_batch(max_row_cnt);
+  } else if (OB_UNLIKELY(rand_scan_processor_.use_rand_scan())) {
     if (OB_FAIL(rand_scan_processor_.inner_get_next_batch(max_row_cnt))) {
     }
   } else if (OB_FAIL(inner_get_next_batch_for_tsc(max_row_cnt))) {
@@ -3620,6 +3682,145 @@ int ObTableScanOp::fill_generated_cellid_mbr(
         eval_info->projected_ = true;
       }
     }
+  }
+  return ret;
+}
+
+int ObTableScanOp::init_fts_batch_exprs()
+{
+  int ret = OB_SUCCESS;
+  const auto *types = MY_SPEC.is_fts_index_aux_
+      ? ObFTIndexRowCache::FTS_INDEX_EXPR_TYPE : ObFTIndexRowCache::FTS_DOC_WORD_EXPR_TYPE;
+  for (int64_t i = 0; OB_SUCC(ret) && i < 4; ++i) {
+    if (OB_FAIL(get_output_fts_col_expr_by_type(types[i], fts_output_exprs_[i]))) {
+    }
+  }
+  return ret;
+}
+
+int ObTableScanOp::fetch_next_fts_batch_document()
+{
+  int ret = OB_SUCCESS;
+  bool found = false;
+  while (OB_SUCC(ret) && !found) {
+    if (OB_FAIL(inner_get_next_batch_for_tsc(1))) {
+    } else if (brs_.size_ == 0) {
+      if (brs_.end_) {
+        ret = OB_ITER_END;
+      }
+    } else if (OB_NOT_NULL(brs_.skip_) && brs_.skip_->at(0)) {
+      // A filtered source document produces no index rows.
+    } else {
+      ObEvalCtx::BatchInfoScopeGuard guard(eval_ctx_);
+      guard.set_batch_size(1);
+      guard.set_batch_idx(0);
+      ObExpr *text = fts_output_exprs_[MY_SPEC.is_fts_index_aux_ ? 0 : 1];
+      ObExpr *doc_id = fts_output_exprs_[MY_SPEC.is_fts_index_aux_ ? 1 : 0];
+      ObDatum *text_datum = nullptr;
+      ObDatum *id_datum = nullptr;
+      if (OB_FAIL(text->eval(eval_ctx_, text_datum))) {
+      } else if (OB_FAIL(doc_id->eval(eval_ctx_, id_datum))) {
+      }
+      // Materialize passthrough values before replacing generated expressions
+      // with individual words. Keep the source row alive for the whole word stream.
+      for (int64_t i = 0; OB_SUCC(ret) && i < MY_SPEC.output_.count(); ++i) {
+        ObExpr *expr = MY_SPEC.output_.at(i);
+        bool generated = false;
+        for (int64_t j = 0; j < 4; ++j) {
+          generated |= expr == fts_output_exprs_[j];
+        }
+        ObDatum *datum = nullptr;
+        if (!generated && OB_FAIL(expr->eval(eval_ctx_, datum))) {
+        }
+      }
+      if (OB_SUCC(ret)) {
+        ObString fulltext = text_datum->get_string();
+        ObArenaAllocator tmp(ObModIds::OB_LOB_ACCESS_BUFFER, OB_MALLOC_NORMAL_BLOCK_SIZE);
+        if (OB_FAIL(ObTextStringHelper::read_real_string_data(get_exec_ctx(), tmp,
+              *text_datum, text->datum_meta_, text->obj_meta_.has_lob_header(), fulltext))) {
+        } else if (OB_FAIL(fts_index_.segment(text->obj_meta_, *id_datum, fulltext))) {
+          if (ret == OB_ITER_END) {
+            ret = OB_SUCCESS;
+          }
+        }
+        if (OB_SUCC(ret)) {
+          fts_doc_active_ = true;
+          found = true;
+        }
+      }
+    }
+  }
+  return ret;
+}
+
+int ObTableScanOp::inner_get_next_fts_index_batch(const int64_t requested)
+{
+  int ret = OB_SUCCESS;
+  int64_t capacity = MIN(requested, MY_SPEC.max_batch_size_);
+  for (int64_t i = 0; i < 4; ++i) {
+    if (!fts_output_exprs_[i]->is_batch_result()) {
+      capacity = MIN(capacity, 1L);
+    }
+  }
+  int64_t count = 0;
+  bool end = false;
+  const auto *types = MY_SPEC.is_fts_index_aux_
+      ? ObFTIndexRowCache::FTS_INDEX_TYPES : ObFTIndexRowCache::FTS_DOC_WORD_TYPES;
+  ObEvalCtx::BatchInfoScopeGuard guard(eval_ctx_);
+  while (OB_SUCC(ret) && count < capacity) {
+    if (!fts_doc_active_ && OB_FAIL(fetch_next_fts_batch_document())) {
+      if (ret == OB_ITER_END) {
+        ret = OB_SUCCESS;
+        end = true;
+        break;
+      }
+    }
+    blocksstable::ObDatumRow *row = nullptr;
+    if (OB_FAIL(ret)) {
+    } else if (OB_FAIL(fts_index_.get_next_row(row))) {
+      if (ret == OB_ITER_END) {
+        ret = OB_SUCCESS;
+        fts_doc_active_ = false;
+        if (count > 0) {
+          // Never fetch a second source document into an outstanding batch.
+          break;
+        }
+      }
+    } else {
+      guard.set_batch_size(capacity);
+      guard.set_batch_idx(count);
+      for (int64_t i = 0; OB_SUCC(ret) && i < 4; ++i) {
+        ObExpr *expr = fts_output_exprs_[i];
+        if (OB_FAIL(expr->locate_datum_for_write(eval_ctx_).from_storage_datum(row->storage_datums_[i], types[i]))) {
+        }
+      }
+      ++count;
+    }
+  }
+  if (OB_SUCC(ret)) {
+    guard.set_batch_size(count);
+    guard.set_batch_idx(0);
+    for (int64_t i = 0; i < MY_SPEC.output_.count(); ++i) {
+      ObExpr *expr = MY_SPEC.output_.at(i);
+      bool generated = false;
+      for (int64_t j = 0; j < 4; ++j) {
+        generated |= expr == fts_output_exprs_[j];
+      }
+      if (expr->is_batch_result()) {
+        ObDatum *values = expr->locate_batch_datums(eval_ctx_);
+        for (int64_t j = 0; j < count; ++j) {
+          if (!generated && j > 0) {
+            values[j] = values[0];
+          }
+          expr->get_evaluated_flags(eval_ctx_).set(j);
+        }
+      }
+      expr->get_eval_info(eval_ctx_).cnt_ = count;
+      expr->set_evaluated_projected(eval_ctx_);
+    }
+    brs_.size_ = count;
+    brs_.end_ = end;
+    brs_.reset_skip(count);
   }
   return ret;
 }

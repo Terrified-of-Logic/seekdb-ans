@@ -255,6 +255,9 @@ public:
   // fts_idx_ is dynamically generated during execution based on the rtdef tree and does not need to be serialized.
   int64_t fts_idx_;
   int64_t minimum_should_match_;
+  // Local retrieval bound, distinct from per-token posting scan limits.
+  // Not serialized: enabled only for one local tablet with no late filters.
+  common::ObLimitParam retrieval_limit_;
 };
 
 struct ObDASIRAuxLookupCtDef : ObDASAttachCtDef
