@@ -1125,13 +1125,46 @@ int finish_hipvs_snapshot(VectorIndexPtr index_handler)
   if (!hnsw->hipvs_snapshot_.enabled) { return OB_SUCCESS; }
   std::lock_guard<std::mutex> guard(hnsw->hipvs_snapshot_.mutex);
   try {
-    return hnsw->hipvs_snapshot_.finish(hnsw->get_index(), hnsw->get_dim(),
-                                       hnsw->get_max_degree(), hnsw->get_ef_construction());
-  } catch (const std::bad_alloc &) { return OB_ALLOCATE_MEMORY_FAILED; }
+    ret = hnsw->hipvs_snapshot_.finish(hnsw->get_index(), hnsw->get_dim(),
+                                      hnsw->get_max_degree(), hnsw->get_ef_construction());
+  } catch (const std::bad_alloc &) { ret = OB_ALLOCATE_MEMORY_FAILED; }
   catch (const std::exception &e) {
-    LOG_WARN("HIPVS_BUILD_EXCEPTION no CPU fallback", "reason", e.what());
-    return OB_ERR_VSAG_RETURN_ERROR;
+    ret = OB_ERR_VSAG_RETURN_ERROR;
+    LOG_WARN("HIPVS_BUILD_EXCEPTION", "reason", e.what());
   }
+  if (OB_FAIL(ret)) {
+    const int gpu_error = ret;
+    // Build a new CPU graph before replacing anything. A failed native import
+    // may have partially populated the original object; never Add into that graph.
+    try {
+      char params[1024] = {0};
+      if (OB_FAIL(construct_vsag_create_param(HNSW_TYPE, hnsw->get_dtype(), hnsw->get_metric(),
+          hnsw->get_dim(), hnsw->get_max_degree(), hnsw->get_ef_construction(), hnsw->get_ef_search(),
+          hnsw->get_allocator(), 0, hnsw->get_refine_type(), hnsw->get_bq_bits_query(),
+          hnsw->get_bq_use_fht(), params))) {
+        return ret;
+      }
+      auto created = vsag::Factory::CreateIndex("hnsw", params, hnsw->get_allocator());
+      if (!created.has_value()) { return OB_ERR_VSAG_RETURN_ERROR; }
+      auto cpu = created.value();
+      auto &pending = hnsw->hipvs_snapshot_;
+      const int64_t rows = pending.ids.size();
+      auto data = vsag::Dataset::Make()->NumElements(rows)->Dim(hnsw->get_dim())
+          ->Ids(pending.ids.data())->Float32Vectors(pending.vectors.data())->Owner(false);
+      auto built = cpu->Build(data);
+      if (!built.has_value() || !built.value().empty() || cpu->GetNumElements() != rows) {
+        return OB_ERR_VSAG_RETURN_ERROR;
+      }
+      hnsw->set_index(cpu);
+      ret = OB_SUCCESS;
+      LOG_WARN("HIPVS_CPU_FALLBACK reason=gpu_build_failed", K(gpu_error), K(rows));
+    } catch (const std::bad_alloc &) { return OB_ALLOCATE_MEMORY_FAILED; }
+    catch (const std::exception &e) {
+      LOG_WARN("HIPVS_CPU_FALLBACK_FAILED", "reason", e.what(), K(gpu_error));
+      return OB_ERR_VSAG_RETURN_ERROR;
+    }
+  }
+  return ret;
 }
 
 int get_index_type(VectorIndexPtr &index_handler)

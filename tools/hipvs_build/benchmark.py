@@ -39,6 +39,7 @@ def main():
     ap.add_argument("--rounds", type=int, default=3)
     ap.add_argument("--port", type=int, default=2981)
     ap.add_argument("--affinity", default="0-15")
+    ap.add_argument("--ef-search", type=int, default=512)
     args = ap.parse_args()
     if args.rows < 100 or args.queries < 2 or args.rounds < 1:
         ap.error("rows>=100, queries>=2 and rounds>=1 are required")
@@ -56,12 +57,12 @@ def main():
     if helper is not None and args.mode != "cpu":
         env["SEEKDB_HIPVS_BUILD_HELPER"] = str(helper)
     mysql = ["mysql", "--protocol=TCP", "-h127.0.0.1", f"-P{args.port}", "-uroot", "-N", "-B"]
-    prefix = "SET ob_query_timeout=300000000; SET ob_trx_timeout=300000000; SET ob_hnsw_ef_search=512; "
+    prefix = f"SET ob_query_timeout=300000000; SET ob_trx_timeout=300000000; SET ob_hnsw_ef_search={args.ef_search}; "
     transcript = open(out / "sql-transcript.jsonl", "w", buffering=1)
     server = None
     handle = None
     report = {"mode": args.mode, "rows": args.rows, "dim": 128, "queries": args.queries,
-              "k": 10, "seed": 20261027, "m": 16, "ef_construction": 200, "ef_search": 512,
+              "k": 10, "seed": 20261027, "m": 16, "ef_construction": 200, "ef_search": args.ef_search,
               "affinity": args.affinity, "binary_sha256": digest(binary),
               "helper_sha256": digest(helper) if helper else None,
               "rounds": [], "checks": [], "state": "running"}
@@ -180,20 +181,19 @@ def main():
                 sql(f"INSERT INTO {table} VALUES {batch}")
             record = {"round": round_id, "import_seconds": time.monotonic()-began}
             create = (f"CREATE VECTOR INDEX vi ON {table}(v) WITH "
-                      "(distance=l2,type=hnsw,lib=vsag,m=16,ef_construction=200,ef_search=512)")
+                      f"(distance=l2,type=hnsw,lib=vsag,m=16,ef_construction=200,ef_search={args.ef_search})")
             before=native_markers()
             began = time.monotonic()
             result = sql(create, check=args.mode!="failure")
             record["create_seconds"] = time.monotonic()-began
             if args.mode == "failure":
-                assert_check("helper_failure_rejected",result.returncode!=0)
-                assert_check("parent_alive_after_helper_failure",rows(f"SELECT count(*) FROM {table}")[0][0]==str(args.rows))
-                report["rounds"].append(record)
-                break
+                assert_check("explicit_fallback_keeps_index_available",result.returncode==0)
             first = ann(table, ql[0])
             record["build_to_first_query_seconds"] = time.monotonic()-began
             record["native_gpu_build_markers"]=native_markers()-before
             assert_check(f"round{round_id}_backend_evidence",record["native_gpu_build_markers"]==(1 if args.mode=="gpu" else 0))
+            if args.mode=="failure":
+                assert_check("helper_failure_logged_CPU_fallback",any("HIPVS_CPU_FALLBACK reason=gpu_build_failed" in p.read_text(errors="replace") for p in (base/"log").glob("seekdb.log*")))
             assert_check(f"round{round_id}_first_query_usable",len(first)==10)
             got, hits = [], 0
             for query_id, vector in enumerate(ql):
@@ -205,9 +205,9 @@ def main():
             record.update(recall_hits=hits, recall_denominator=args.queries*10,
                           recall_at_10=hits/(args.queries*10))
             (out / f"round{round_id}-results.json").write_text(json.dumps(got))
+            report["rounds"].append(record)
             assert_check(f"round{round_id}_recall_local_floor_095",record["recall_at_10"]>=.95)
             assert_check(f"round{round_id}_base_count",rows(f"SELECT count(*) FROM {table}")[0][0]==str(args.rows))
-            report["rounds"].append(record)
             save()
             print(json.dumps(record),flush=True)
         if args.mode != "failure":

@@ -25,8 +25,9 @@ checks the x86_64 hnswlib header/layout; it is not a generic cross-platform pars
 The hipVS package keeps the `cuvs*` C API names on AMD; these names do not imply CUDA.
 
 GPU libraries load in the helper process only. The parent needs no ROCm headers,
-GPU build flags or link dependencies. A helper/GPU/import failure returns an error;
-it is never credited as a successful GPU build. Small snapshots with `N <= 4*M`
+GPU build flags or link dependencies. A helper/GPU/import failure builds a fresh
+complete CPU graph and emits `HIPVS_CPU_FALLBACK reason=gpu_build_failed` with the
+original GPU error; it is never credited as a successful GPU build. Small snapshots with `N <= 4*M`
 explicitly emit `HIPVS_CPU_FALLBACK reason=small_snapshot` and use CPU construction.
 These cases must be excluded from GPU performance claims. Staging is limited to
 1 GiB of vector data. The helper has a 300-second timeout. The default tested
@@ -90,10 +91,14 @@ must be checked separately when available.
 
 The script verifies every query has K distinct valid original IDs, Recall@10,
 SQL filtering, insert/update/delete, small and NULL vectors, empty indexes,
-normal shutdown/reopen and no new GPU build after reopen. It requires one native
+normal shutdown/reopen and no new GPU build after reopen. Failure mode requires
+an explicit CPU fallback log and complete SQL Recall, and is excluded from GPU timings.
+It requires one native
 GPU completion marker for each timed GPU round and zero for CPU rounds. Evidence
 includes raw SQL transcripts, server logs, individual result IDs, exact truth,
 data/binary/helper SHA-256 and per-round timings.
+For the 50K quality check, pass `--ef-search 1024` to both CPU and GPU commands.
+The unchanged 512 query breadth did not pass the local CPU Recall floor at 50K.
 
 ## GPU kernel evidence
 

@@ -122,7 +122,8 @@ public:
       return OB_TIMEOUT;
     }
     if (!WIFEXITED(status) || WEXITSTATUS(status) != 0) {
-      LOG_WARN("HIPVS_BUILD_FAILED no CPU fallback", K(status), K(pid));
+      ret = OB_ERR_VSAG_RETURN_ERROR;
+      LOG_WARN("HIPVS_BUILD_FAILED", K(status), K(pid));
       return OB_ERR_VSAG_RETURN_ERROR;
     }
     // Import the complete native graph; do not perform CPU Build/Add first.
