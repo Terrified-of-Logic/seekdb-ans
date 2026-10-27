@@ -39,6 +39,62 @@ namespace oceanbase
 {
 namespace sql
 {
+
+namespace
+{
+// An empty property list always canonicalises to the same JSON for a given
+// parser, so the result is remembered per thread instead of being rebuilt from
+// scratch on every TOKENIZE call.
+struct ObTokenizeDefaultProps
+{
+  static const int64_t MAX_ENTRIES = 2;
+  static const int64_t NAME_SIZE = 64;
+  static const int64_t BUF_SIZE = 256;
+  struct Entry
+  {
+    char name[NAME_SIZE];
+    int64_t name_len;
+    char buf[BUF_SIZE];
+    int64_t buf_len;
+  };
+  Entry entries[MAX_ENTRIES];
+  int64_t count;
+};
+
+thread_local ObTokenizeDefaultProps tl_default_props;
+
+bool load_cached_default_props(const ObString &parser_name, ObString &properties)
+{
+  bool hit = false;
+  for (int64_t i = 0; !hit && i < tl_default_props.count; ++i) {
+    const ObTokenizeDefaultProps::Entry &entry = tl_default_props.entries[i];
+    if (entry.name_len == parser_name.length()
+        && 0 == MEMCMP(entry.name, parser_name.ptr(), entry.name_len)) {
+      properties.assign_ptr(entry.buf, static_cast<ObString::obstr_size_t>(entry.buf_len));
+      hit = true;
+    }
+  }
+  return hit;
+}
+
+void store_cached_default_props(const ObString &parser_name, const ObString &properties)
+{
+  if (parser_name.length() > 0 && parser_name.length() <= ObTokenizeDefaultProps::NAME_SIZE
+      && properties.length() > 0 && properties.length() <= ObTokenizeDefaultProps::BUF_SIZE) {
+    int64_t slot = tl_default_props.count;
+    if (slot >= ObTokenizeDefaultProps::MAX_ENTRIES) {
+      slot = ObTokenizeDefaultProps::MAX_ENTRIES - 1;
+    } else {
+      ++tl_default_props.count;
+    }
+    ObTokenizeDefaultProps::Entry &entry = tl_default_props.entries[slot];
+    MEMCPY(entry.name, parser_name.ptr(), parser_name.length());
+    entry.name_len = parser_name.length();
+    MEMCPY(entry.buf, properties.ptr(), properties.length());
+    entry.buf_len = properties.length();
+  }
+}
+} // namespace
 ObExprTokenize::ObExprTokenize(common::ObIAllocator &alloc)
     : ObStringExprOperator(alloc,
                            T_FUN_TOKENIZE,
@@ -377,13 +433,17 @@ int ObExprTokenize::TokenizeParam::reform_parser_properties(const ObString &prop
   int ret = OB_SUCCESS;
   storage::ObFTParserJsonProps parser_properties;
 
-  if (OB_FAIL(parser_properties.init())) {
+  if (properties.empty() && load_cached_default_props(parser_name_, properties_)) {
+    // Reuse the canonical JSON built for this parser on an earlier call.
+  } else if (OB_FAIL(parser_properties.init())) {
   } else if (OB_FAIL(parser_properties.parse_from_valid_str(properties))) {
     LOG_USER_ERROR(OB_INVALID_ARGUMENT, "parser properties invalid.");
   } else if (OB_FAIL(parser_properties.rebuild_props_for_ddl(parser_name_,
                                                              ObCollationType::CS_TYPE_UTF8MB4_BIN,
                                                              true))) {
   } else if (OB_FAIL(parser_properties.to_format_json(allocator_, properties_))) {
+  } else if (properties.empty()) {
+    store_cached_default_props(parser_name_, properties_);
   }
 
   return ret;

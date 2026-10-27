@@ -27,6 +27,39 @@ namespace oceanbase
 namespace storage
 {
 
+namespace
+{
+// Returns true when folding the word to lower case cannot change it. Under the
+// default unicode case table only U+0000-U+05FF, U+1E00-U+1FFF, U+2100-U+21FF,
+// U+2400-U+24FF and U+FF00-U+FFFF carry case mappings, so an ASCII word without
+// upper case letters and a three byte sequence whose lead byte is inside the CJK
+// blocks are already folded. Everything else takes the charset conversion.
+bool is_casedown_identity(const ObCollationType coll_type, const ObString &word)
+{
+  bool identity = true;
+  if (CHARSET_UTF8MB4 != ObCharset::charset_type_by_coll(coll_type)) {
+    identity = false;
+  } else {
+    const unsigned char *ptr = reinterpret_cast<const unsigned char *>(word.ptr());
+    const int64_t len = word.length();
+    for (int64_t i = 0; identity && i < len;) {
+      const unsigned char byte = ptr[i];
+      if (byte < 0x80) {
+        if (byte >= 'A' && byte <= 'Z') {
+          identity = false;
+        }
+        ++i;
+      } else if (byte >= 0xE3 && byte <= 0xE9 && i + 3 <= len) {
+        i += 3;
+      } else {
+        identity = false;
+      }
+    }
+  }
+  return identity;
+}
+} // namespace
+
 ////////////////////////////////////////////////////////////////////////////////
 // class ObStopWordChecker
 ObStopWordChecker::~ObStopWordChecker()
@@ -164,15 +197,21 @@ int ObAddWord::casedown_word(const ObFTWord &src, ObFTWord &dst)
   if (OB_UNLIKELY(src.empty())) {
     ret = OB_INVALID_ARGUMENT;
   } else if (flag_.casedown()) {
-    ObString dst_str;
-    if (OB_FAIL(ObCharset::tolower(
-                    word_meta_.get_collation_type(),
-                    src.get_word().get_string(),
-                    dst_str,
-                    allocator_))) {
+    if (is_casedown_identity(word_meta_.get_collation_type(), src.get_word().get_string())) {
+      // Nothing to fold, so the folded word is the source word itself and no
+      // buffer is taken from the allocator.
+      dst = src;
     } else {
-      ObFTWord tmp(dst_str.length(), dst_str.ptr(), word_meta_);
-      dst = tmp;
+      ObString dst_str;
+      if (OB_FAIL(ObCharset::tolower(
+                      word_meta_.get_collation_type(),
+                      src.get_word().get_string(),
+                      dst_str,
+                      allocator_))) {
+      } else {
+        ObFTWord tmp(dst_str.length(), dst_str.ptr(), word_meta_);
+        dst = tmp;
+      }
     }
   } else {
     dst = src;
