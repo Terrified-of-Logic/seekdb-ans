@@ -1,0 +1,77 @@
+{
+  "source_commit": "25c3f26d8e0d4374c510c298bfbbdd6c40bba5d2",
+  "datasets": [
+    {
+      "rows": 20000,
+      "dim": 128,
+      "ef_search": 512,
+      "cpu_seconds": [
+        5.396882269531488,
+        5.3742611687630415,
+        5.373090051114559
+      ],
+      "gpu_seconds": [
+        1.6912127863615751,
+        1.664880195632577,
+        1.5848219860345125
+      ],
+      "cpu_median": 5.3742611687630415,
+      "gpu_median": 1.664880195632577,
+      "speedup": 3.2280167563174555,
+      "cpu_recall": [
+        0.982,
+        0.982,
+        0.982
+      ],
+      "gpu_recall": [
+        0.993,
+        0.991,
+        0.994
+      ],
+      "cpu_reopen_recall": 0.982,
+      "gpu_reopen_recall": 0.994,
+      "cpu_checks": 421,
+      "gpu_checks": 421,
+      "binary_sha256": "3f059a921f1af32fbf14d2e140496f33eeba767d2ccffb5723b4f8e2f01227ad"
+    },
+    {
+      "rows": 50000,
+      "dim": 128,
+      "ef_search": 1024,
+      "cpu_seconds": [
+        16.051240101456642,
+        15.916510485112667,
+        16.119530621916056
+      ],
+      "gpu_seconds": [
+        2.4144530426710844,
+        2.3185393270105124,
+        2.2884302753955126
+      ],
+      "cpu_median": 16.051240101456642,
+      "gpu_median": 2.3185393270105124,
+      "speedup": 6.9229966964385525,
+      "cpu_recall": [
+        0.973,
+        0.973,
+        0.973
+      ],
+      "gpu_recall": [
+        0.989,
+        0.992,
+        0.995
+      ],
+      "cpu_reopen_recall": 0.973,
+      "gpu_reopen_recall": 0.995,
+      "cpu_checks": 421,
+      "gpu_checks": 421,
+      "binary_sha256": "3f059a921f1af32fbf14d2e140496f33eeba767d2ccffb5723b4f8e2f01227ad"
+    }
+  ],
+  "failure": {
+    "state": "passed",
+    "checks": 16,
+    "recall": 1.0,
+    "native_gpu_markers": 0
+  }
+}

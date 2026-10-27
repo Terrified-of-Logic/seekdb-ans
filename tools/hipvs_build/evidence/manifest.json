@@ -1,0 +1,22 @@
+{
+  "baseline": "5bce9e06d1281347ad61344e4b01fab9158c58a2",
+  "implementation_commit": "b866568dc2b8cda4ddb7c292461bd006fba6e7fd",
+  "source_sha256": {
+    "src/oblib/lib/vector/ob_vsag_adaptor.cpp": "25ac47fd82ce3c53a12ffb3bff7d0acd3809323d8b845a68db992f1a750499ab",
+    "src/oblib/lib/vector/ob_vsag_adaptor.h": "bf7f1a140b8809877c84e7ce6637359431c207dc488e7e852a51d3959bbc2670",
+    "src/oblib/lib/vector/hipvs_snapshot.h": "e1257d9f601781d0e36aa0287dfa61b1eb6f92c852ec2f77df1dddee39662b9c",
+    "src/observer/vector_index/ob_plugin_vector_index_adaptor.cpp": "47be329a0b4aebec8746d612f1e52af2f249c92ee79b12cb146e85dfdf4a4644",
+    "tools/hipvs_build/build_helper.cpp": "e35f18d64ee91039776b6ee121c7bdf6fbc2549770924dcd987230380e475eab",
+    "tools/hipvs_build/benchmark.py": "350c6c3601863676846c1fed34300b83508aed7ed9ee0e6b9c0f82b1196041ca"
+  },
+  "seekdb_binary_sha256": "3f059a921f1af32fbf14d2e140496f33eeba767d2ccffb5723b4f8e2f01227ad",
+  "helper_sha256": "117a73e8396feb7a78cc48fb7c39fbbbd1a07be387c08a663af28389a6190612",
+  "hipvs_libcuvs_sha256": "5ccf012af5923c687cd2d22149740a410ca69e0aa51223a6386ba6fc129c967a",
+  "hipvs_libcuvs_c_sha256": "b63211897276e0a6911bb534fe77c8b0b59f31c50af1df2f108845f06ad46ebf",
+  "build_notes": [
+    "Official baseline archived into independent WSL source tree; existing AI/FTS trees not modified.",
+    "Complete source build passed, then only vector unity translation unit was rebuilt for geometric staging growth; its archive member and complete executable were relinked.",
+    "WSL glibc 2.43 required compatibility relinking with instance libm 2.39; resulting remainder dependency is GLIBC_2.2.5. No product logic changed for this relink.",
+    "The archived source tree did not include .git metadata, so compiled source revision prints 1-. Use this source manifest and the Git baseline/commit for provenance."
+  ]
+}

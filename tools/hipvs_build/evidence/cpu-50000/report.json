@@ -1,0 +1,1744 @@
+{
+  "mode": "cpu",
+  "rows": 50000,
+  "dim": 128,
+  "queries": 100,
+  "k": 10,
+  "seed": 20261027,
+  "m": 16,
+  "ef_construction": 200,
+  "ef_search": 1024,
+  "affinity": "0-15",
+  "binary_sha256": "3f059a921f1af32fbf14d2e140496f33eeba767d2ccffb5723b4f8e2f01227ad",
+  "helper_sha256": "117a73e8396feb7a78cc48fb7c39fbbbd1a07be387c08a663af28389a6190612",
+  "rounds": [
+    {
+      "round": 0,
+      "import_seconds": 4.808711279183626,
+      "create_seconds": 15.997172648087144,
+      "build_to_first_query_seconds": 16.051240101456642,
+      "native_gpu_build_markers": 0,
+      "recall_hits": 973,
+      "recall_denominator": 1000,
+      "recall_at_10": 0.973
+    },
+    {
+      "round": 1,
+      "import_seconds": 4.659743446856737,
+      "create_seconds": 15.865047052502632,
+      "build_to_first_query_seconds": 15.916510485112667,
+      "native_gpu_build_markers": 0,
+      "recall_hits": 973,
+      "recall_denominator": 1000,
+      "recall_at_10": 0.973
+    },
+    {
+      "round": 2,
+      "import_seconds": 4.661857794970274,
+      "create_seconds": 16.067645141854882,
+      "build_to_first_query_seconds": 16.119530621916056,
+      "native_gpu_build_markers": 0,
+      "recall_hits": 973,
+      "recall_denominator": 1000,
+      "recall_at_10": 0.973
+    }
+  ],
+  "checks": [
+    {
+      "name": "round0_backend_evidence",
+      "passed": true
+    },
+    {
+      "name": "round0_first_query_usable",
+      "passed": true
+    },
+    {
+      "name": "round0_query0_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round0_query1_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round0_query2_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round0_query3_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round0_query4_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round0_query5_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round0_query6_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round0_query7_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round0_query8_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round0_query9_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round0_query10_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round0_query11_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round0_query12_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round0_query13_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round0_query14_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round0_query15_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round0_query16_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round0_query17_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round0_query18_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round0_query19_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round0_query20_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round0_query21_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round0_query22_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round0_query23_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round0_query24_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round0_query25_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round0_query26_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round0_query27_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round0_query28_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round0_query29_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round0_query30_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round0_query31_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round0_query32_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round0_query33_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round0_query34_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round0_query35_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round0_query36_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round0_query37_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round0_query38_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round0_query39_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round0_query40_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round0_query41_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round0_query42_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round0_query43_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round0_query44_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round0_query45_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round0_query46_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round0_query47_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round0_query48_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round0_query49_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round0_query50_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round0_query51_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round0_query52_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round0_query53_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round0_query54_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round0_query55_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round0_query56_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round0_query57_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round0_query58_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round0_query59_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round0_query60_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round0_query61_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round0_query62_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round0_query63_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round0_query64_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round0_query65_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round0_query66_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round0_query67_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round0_query68_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round0_query69_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round0_query70_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round0_query71_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round0_query72_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round0_query73_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round0_query74_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round0_query75_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round0_query76_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round0_query77_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round0_query78_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round0_query79_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round0_query80_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round0_query81_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round0_query82_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round0_query83_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round0_query84_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round0_query85_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round0_query86_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round0_query87_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round0_query88_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round0_query89_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round0_query90_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round0_query91_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round0_query92_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round0_query93_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round0_query94_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round0_query95_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round0_query96_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round0_query97_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round0_query98_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round0_query99_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round0_recall_local_floor_095",
+      "passed": true
+    },
+    {
+      "name": "round0_base_count",
+      "passed": true
+    },
+    {
+      "name": "round1_backend_evidence",
+      "passed": true
+    },
+    {
+      "name": "round1_first_query_usable",
+      "passed": true
+    },
+    {
+      "name": "round1_query0_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round1_query1_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round1_query2_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round1_query3_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round1_query4_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round1_query5_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round1_query6_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round1_query7_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round1_query8_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round1_query9_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round1_query10_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round1_query11_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round1_query12_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round1_query13_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round1_query14_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round1_query15_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round1_query16_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round1_query17_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round1_query18_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round1_query19_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round1_query20_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round1_query21_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round1_query22_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round1_query23_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round1_query24_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round1_query25_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round1_query26_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round1_query27_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round1_query28_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round1_query29_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round1_query30_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round1_query31_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round1_query32_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round1_query33_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round1_query34_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round1_query35_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round1_query36_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round1_query37_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round1_query38_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round1_query39_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round1_query40_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round1_query41_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round1_query42_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round1_query43_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round1_query44_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round1_query45_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round1_query46_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round1_query47_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round1_query48_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round1_query49_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round1_query50_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round1_query51_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round1_query52_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round1_query53_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round1_query54_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round1_query55_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round1_query56_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round1_query57_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round1_query58_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round1_query59_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round1_query60_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round1_query61_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round1_query62_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round1_query63_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round1_query64_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round1_query65_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round1_query66_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round1_query67_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round1_query68_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round1_query69_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round1_query70_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round1_query71_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round1_query72_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round1_query73_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round1_query74_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round1_query75_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round1_query76_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round1_query77_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round1_query78_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round1_query79_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round1_query80_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round1_query81_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round1_query82_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round1_query83_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round1_query84_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round1_query85_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round1_query86_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round1_query87_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round1_query88_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round1_query89_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round1_query90_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round1_query91_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round1_query92_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round1_query93_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round1_query94_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round1_query95_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round1_query96_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round1_query97_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round1_query98_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round1_query99_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round1_recall_local_floor_095",
+      "passed": true
+    },
+    {
+      "name": "round1_base_count",
+      "passed": true
+    },
+    {
+      "name": "round2_backend_evidence",
+      "passed": true
+    },
+    {
+      "name": "round2_first_query_usable",
+      "passed": true
+    },
+    {
+      "name": "round2_query0_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round2_query1_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round2_query2_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round2_query3_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round2_query4_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round2_query5_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round2_query6_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round2_query7_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round2_query8_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round2_query9_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round2_query10_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round2_query11_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round2_query12_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round2_query13_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round2_query14_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round2_query15_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round2_query16_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round2_query17_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round2_query18_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round2_query19_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round2_query20_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round2_query21_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round2_query22_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round2_query23_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round2_query24_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round2_query25_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round2_query26_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round2_query27_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round2_query28_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round2_query29_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round2_query30_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round2_query31_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round2_query32_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round2_query33_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round2_query34_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round2_query35_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round2_query36_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round2_query37_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round2_query38_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round2_query39_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round2_query40_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round2_query41_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round2_query42_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round2_query43_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round2_query44_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round2_query45_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round2_query46_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round2_query47_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round2_query48_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round2_query49_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round2_query50_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round2_query51_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round2_query52_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round2_query53_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round2_query54_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round2_query55_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round2_query56_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round2_query57_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round2_query58_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round2_query59_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round2_query60_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round2_query61_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round2_query62_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round2_query63_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round2_query64_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round2_query65_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round2_query66_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round2_query67_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round2_query68_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round2_query69_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round2_query70_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round2_query71_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round2_query72_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round2_query73_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round2_query74_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round2_query75_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round2_query76_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round2_query77_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round2_query78_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round2_query79_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round2_query80_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round2_query81_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round2_query82_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round2_query83_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round2_query84_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round2_query85_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round2_query86_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round2_query87_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round2_query88_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round2_query89_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round2_query90_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round2_query91_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round2_query92_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round2_query93_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round2_query94_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round2_query95_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round2_query96_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round2_query97_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round2_query98_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round2_query99_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round2_recall_local_floor_095",
+      "passed": true
+    },
+    {
+      "name": "round2_base_count",
+      "passed": true
+    },
+    {
+      "name": "filtered_ANN_matches_SQL_exact",
+      "passed": true
+    },
+    {
+      "name": "ANN_plan_uses_vector_index",
+      "passed": true
+    },
+    {
+      "name": "insert_after_build",
+      "passed": true
+    },
+    {
+      "name": "update_after_build",
+      "passed": true
+    },
+    {
+      "name": "delete_after_build",
+      "passed": true
+    },
+    {
+      "name": "small_snapshot_and_null",
+      "passed": true
+    },
+    {
+      "name": "empty_index_query",
+      "passed": true
+    },
+    {
+      "name": "reopen_query0_valid",
+      "passed": true
+    },
+    {
+      "name": "reopen_query1_valid",
+      "passed": true
+    },
+    {
+      "name": "reopen_query2_valid",
+      "passed": true
+    },
+    {
+      "name": "reopen_query3_valid",
+      "passed": true
+    },
+    {
+      "name": "reopen_query4_valid",
+      "passed": true
+    },
+    {
+      "name": "reopen_query5_valid",
+      "passed": true
+    },
+    {
+      "name": "reopen_query6_valid",
+      "passed": true
+    },
+    {
+      "name": "reopen_query7_valid",
+      "passed": true
+    },
+    {
+      "name": "reopen_query8_valid",
+      "passed": true
+    },
+    {
+      "name": "reopen_query9_valid",
+      "passed": true
+    },
+    {
+      "name": "reopen_query10_valid",
+      "passed": true
+    },
+    {
+      "name": "reopen_query11_valid",
+      "passed": true
+    },
+    {
+      "name": "reopen_query12_valid",
+      "passed": true
+    },
+    {
+      "name": "reopen_query13_valid",
+      "passed": true
+    },
+    {
+      "name": "reopen_query14_valid",
+      "passed": true
+    },
+    {
+      "name": "reopen_query15_valid",
+      "passed": true
+    },
+    {
+      "name": "reopen_query16_valid",
+      "passed": true
+    },
+    {
+      "name": "reopen_query17_valid",
+      "passed": true
+    },
+    {
+      "name": "reopen_query18_valid",
+      "passed": true
+    },
+    {
+      "name": "reopen_query19_valid",
+      "passed": true
+    },
+    {
+      "name": "reopen_query20_valid",
+      "passed": true
+    },
+    {
+      "name": "reopen_query21_valid",
+      "passed": true
+    },
+    {
+      "name": "reopen_query22_valid",
+      "passed": true
+    },
+    {
+      "name": "reopen_query23_valid",
+      "passed": true
+    },
+    {
+      "name": "reopen_query24_valid",
+      "passed": true
+    },
+    {
+      "name": "reopen_query25_valid",
+      "passed": true
+    },
+    {
+      "name": "reopen_query26_valid",
+      "passed": true
+    },
+    {
+      "name": "reopen_query27_valid",
+      "passed": true
+    },
+    {
+      "name": "reopen_query28_valid",
+      "passed": true
+    },
+    {
+      "name": "reopen_query29_valid",
+      "passed": true
+    },
+    {
+      "name": "reopen_query30_valid",
+      "passed": true
+    },
+    {
+      "name": "reopen_query31_valid",
+      "passed": true
+    },
+    {
+      "name": "reopen_query32_valid",
+      "passed": true
+    },
+    {
+      "name": "reopen_query33_valid",
+      "passed": true
+    },
+    {
+      "name": "reopen_query34_valid",
+      "passed": true
+    },
+    {
+      "name": "reopen_query35_valid",
+      "passed": true
+    },
+    {
+      "name": "reopen_query36_valid",
+      "passed": true
+    },
+    {
+      "name": "reopen_query37_valid",
+      "passed": true
+    },
+    {
+      "name": "reopen_query38_valid",
+      "passed": true
+    },
+    {
+      "name": "reopen_query39_valid",
+      "passed": true
+    },
+    {
+      "name": "reopen_query40_valid",
+      "passed": true
+    },
+    {
+      "name": "reopen_query41_valid",
+      "passed": true
+    },
+    {
+      "name": "reopen_query42_valid",
+      "passed": true
+    },
+    {
+      "name": "reopen_query43_valid",
+      "passed": true
+    },
+    {
+      "name": "reopen_query44_valid",
+      "passed": true
+    },
+    {
+      "name": "reopen_query45_valid",
+      "passed": true
+    },
+    {
+      "name": "reopen_query46_valid",
+      "passed": true
+    },
+    {
+      "name": "reopen_query47_valid",
+      "passed": true
+    },
+    {
+      "name": "reopen_query48_valid",
+      "passed": true
+    },
+    {
+      "name": "reopen_query49_valid",
+      "passed": true
+    },
+    {
+      "name": "reopen_query50_valid",
+      "passed": true
+    },
+    {
+      "name": "reopen_query51_valid",
+      "passed": true
+    },
+    {
+      "name": "reopen_query52_valid",
+      "passed": true
+    },
+    {
+      "name": "reopen_query53_valid",
+      "passed": true
+    },
+    {
+      "name": "reopen_query54_valid",
+      "passed": true
+    },
+    {
+      "name": "reopen_query55_valid",
+      "passed": true
+    },
+    {
+      "name": "reopen_query56_valid",
+      "passed": true
+    },
+    {
+      "name": "reopen_query57_valid",
+      "passed": true
+    },
+    {
+      "name": "reopen_query58_valid",
+      "passed": true
+    },
+    {
+      "name": "reopen_query59_valid",
+      "passed": true
+    },
+    {
+      "name": "reopen_query60_valid",
+      "passed": true
+    },
+    {
+      "name": "reopen_query61_valid",
+      "passed": true
+    },
+    {
+      "name": "reopen_query62_valid",
+      "passed": true
+    },
+    {
+      "name": "reopen_query63_valid",
+      "passed": true
+    },
+    {
+      "name": "reopen_query64_valid",
+      "passed": true
+    },
+    {
+      "name": "reopen_query65_valid",
+      "passed": true
+    },
+    {
+      "name": "reopen_query66_valid",
+      "passed": true
+    },
+    {
+      "name": "reopen_query67_valid",
+      "passed": true
+    },
+    {
+      "name": "reopen_query68_valid",
+      "passed": true
+    },
+    {
+      "name": "reopen_query69_valid",
+      "passed": true
+    },
+    {
+      "name": "reopen_query70_valid",
+      "passed": true
+    },
+    {
+      "name": "reopen_query71_valid",
+      "passed": true
+    },
+    {
+      "name": "reopen_query72_valid",
+      "passed": true
+    },
+    {
+      "name": "reopen_query73_valid",
+      "passed": true
+    },
+    {
+      "name": "reopen_query74_valid",
+      "passed": true
+    },
+    {
+      "name": "reopen_query75_valid",
+      "passed": true
+    },
+    {
+      "name": "reopen_query76_valid",
+      "passed": true
+    },
+    {
+      "name": "reopen_query77_valid",
+      "passed": true
+    },
+    {
+      "name": "reopen_query78_valid",
+      "passed": true
+    },
+    {
+      "name": "reopen_query79_valid",
+      "passed": true
+    },
+    {
+      "name": "reopen_query80_valid",
+      "passed": true
+    },
+    {
+      "name": "reopen_query81_valid",
+      "passed": true
+    },
+    {
+      "name": "reopen_query82_valid",
+      "passed": true
+    },
+    {
+      "name": "reopen_query83_valid",
+      "passed": true
+    },
+    {
+      "name": "reopen_query84_valid",
+      "passed": true
+    },
+    {
+      "name": "reopen_query85_valid",
+      "passed": true
+    },
+    {
+      "name": "reopen_query86_valid",
+      "passed": true
+    },
+    {
+      "name": "reopen_query87_valid",
+      "passed": true
+    },
+    {
+      "name": "reopen_query88_valid",
+      "passed": true
+    },
+    {
+      "name": "reopen_query89_valid",
+      "passed": true
+    },
+    {
+      "name": "reopen_query90_valid",
+      "passed": true
+    },
+    {
+      "name": "reopen_query91_valid",
+      "passed": true
+    },
+    {
+      "name": "reopen_query92_valid",
+      "passed": true
+    },
+    {
+      "name": "reopen_query93_valid",
+      "passed": true
+    },
+    {
+      "name": "reopen_query94_valid",
+      "passed": true
+    },
+    {
+      "name": "reopen_query95_valid",
+      "passed": true
+    },
+    {
+      "name": "reopen_query96_valid",
+      "passed": true
+    },
+    {
+      "name": "reopen_query97_valid",
+      "passed": true
+    },
+    {
+      "name": "reopen_query98_valid",
+      "passed": true
+    },
+    {
+      "name": "reopen_query99_valid",
+      "passed": true
+    },
+    {
+      "name": "reopen_recall_local_floor_095",
+      "passed": true
+    },
+    {
+      "name": "reopen_does_not_rebuild_GPU_graph",
+      "passed": true
+    }
+  ],
+  "state": "passed",
+  "oracle_seconds": 1.9794369786977768,
+  "data_sha256": {
+    "base.f32": "97e2b94279fc51a3e05b27d4dedd21b3382ea09a78c56f4cf2dac692c991c13a",
+    "queries.f32": "8f06b30f49de3cc61389a97d6ae480d86327345d1a74124b1b939a2d3d730759",
+    "ids.i64": "e65e274165b4d5a66527bca1c60ff88474454287a9ad825cf7184c2445bbc025"
+  },
+  "startup_seconds": 2.022747317329049,
+  "version": "5.7.25-OceanBase seekdb-v1.4.0.0",
+  "reopen_seconds": 2.0230101477354765,
+  "reopen_recall_at_10": 0.973,
+  "median_build_to_first_query_seconds": 16.051240101456642
+}

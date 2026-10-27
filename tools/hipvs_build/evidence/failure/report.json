@@ -1,0 +1,101 @@
+{
+  "mode": "failure",
+  "rows": 1000,
+  "dim": 128,
+  "queries": 10,
+  "k": 10,
+  "seed": 20261027,
+  "m": 16,
+  "ef_construction": 200,
+  "ef_search": 512,
+  "affinity": "0-15",
+  "binary_sha256": "3f059a921f1af32fbf14d2e140496f33eeba767d2ccffb5723b4f8e2f01227ad",
+  "helper_sha256": "68d5dd3517b8fb324b5fbdc365add3c821380e173a951f6632d4b2d6ecb04fd4",
+  "rounds": [
+    {
+      "round": 0,
+      "import_seconds": 0.10406462103128433,
+      "create_seconds": 0.7491629384458065,
+      "build_to_first_query_seconds": 0.771638635545969,
+      "native_gpu_build_markers": 0,
+      "recall_hits": 100,
+      "recall_denominator": 100,
+      "recall_at_10": 1.0
+    }
+  ],
+  "checks": [
+    {
+      "name": "explicit_fallback_keeps_index_available",
+      "passed": true
+    },
+    {
+      "name": "round0_backend_evidence",
+      "passed": true
+    },
+    {
+      "name": "helper_failure_logged_CPU_fallback",
+      "passed": true
+    },
+    {
+      "name": "round0_first_query_usable",
+      "passed": true
+    },
+    {
+      "name": "round0_query0_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round0_query1_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round0_query2_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round0_query3_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round0_query4_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round0_query5_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round0_query6_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round0_query7_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round0_query8_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round0_query9_valid_ids",
+      "passed": true
+    },
+    {
+      "name": "round0_recall_local_floor_095",
+      "passed": true
+    },
+    {
+      "name": "round0_base_count",
+      "passed": true
+    }
+  ],
+  "state": "passed",
+  "oracle_seconds": 0.009931549429893494,
+  "data_sha256": {
+    "base.f32": "e26d1c91e128576af18c9746a9206b82dee3e0942037f029eef97e17e4cd0abc",
+    "queries.f32": "39cb9084cd4d34c05496cceae2f073b807c6e41255d802578a6b131d4837bc02",
+    "ids.i64": "72231666afd7194c858f515a4619ca46f8a87601d7fda7aa782f8a937c5b06a0"
+  },
+  "startup_seconds": 2.0226733405143023,
+  "version": "5.7.25-OceanBase seekdb-v1.4.0.0"
+}
