@@ -7,5 +7,5 @@ Outputs & filters:
 -------------------------------------
   0 - output([vectors_r2.id]), filter(nil), rowset=16
       access([vectors_r2.id]), partitions(p0)
-      is_index_back=true, is_global_index=false, 
+      is_index_back=true, is_global_index=false,
       range_key([vectors_r2.__vid_1793103693709887], [vectors_r2.__type_17_1793103694003591]), range(MIN,MIN ; MAX,MAX)always true
