@@ -198,6 +198,12 @@ int ObFileScanOp::get_next_list_row()
     if (0 == strcmp(entry->d_name, ".") || 0 == strcmp(entry->d_name, "..")) {
       continue;
     }
+    // Hidden entries are not data files: skip them so that glob() does not
+    // report sidecar artifacts such as macOS AppleDouble "._name" files that
+    // some packaging tools create next to the real payload.
+    if ('.' == entry->d_name[0]) {
+      continue;
+    }
     if (0 != fstatat(dirfd(directory_), entry->d_name, &entry_stat, AT_SYMLINK_NOFOLLOW)) {
       continue;
     }
