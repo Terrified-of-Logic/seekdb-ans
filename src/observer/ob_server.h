@@ -231,6 +231,8 @@ class ObSchemaRefreshSchedulerAdapter;
 //   server.start(); // blocked only program is coming to stop
 //   server.destory();
 //
+class ObAIColumnWorkerService;
+
 class ObServer : public share::ObIMemstoreRuntime,
                  public data_plane::ObILockWaitService,
                  public data_plane::ObIMemoryPressureService,
@@ -677,6 +679,7 @@ public:
     return &ob_service_;
   }
   omt::ObAiService * ai_service() { return mods_ai_service_; }
+  ObAIColumnWorkerService * ai_column_worker_service() { return mods_ai_column_worker_service_; }
   share::ObChangeStreamMgr * change_stream_mgr() { return mods_change_stream_mgr_; }
   // Explicit module lifecycle (ObServer owns modules; defined in ob_server_runtime_controller.cpp).
   int obs_construct_modules();
@@ -754,6 +757,7 @@ private:
   rootserver::ObSystemPackageLoadService * mods_system_package_load_service_ = nullptr;
   rootserver::ObDDLScheduler * mods_ddl_scheduler_ = nullptr;
   omt::ObAiService * mods_ai_service_ = nullptr;
+  ObAIColumnWorkerService * mods_ai_column_worker_service_ = nullptr;
   share::ObChangeStreamMgr * mods_change_stream_mgr_ = nullptr;
   ObLSRuntimeAdapter ls_runtime_adapter_;
 }; // end of class ObServer

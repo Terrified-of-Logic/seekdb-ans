@@ -531,6 +531,9 @@ SHARE_UNITY_GROUPS = [
 ]
 
 SHARE_STANDALONE_SOURCES = [
+    struct(path = "src/share/ai_column/ob_ai_column_proxy.cpp", language = "c++", kind = "source"),
+    struct(path = "src/share/ai_column/ob_ai_column_metadata_util.cpp", language = "c++", kind = "source"),
+    struct(path = "src/share/ai_column/ob_ai_column_struct.cpp", language = "c++", kind = "source"),
     struct(path = "src/share/geo/ob_geo_func_covered_by1.cpp", language = "c++", kind = "source"),
     struct(path = "src/share/geo/ob_geo_func_covered_by2.cpp", language = "c++", kind = "source"),
     struct(path = "src/share/geo/ob_geo_func_crosses1.cpp", language = "c++", kind = "source"),

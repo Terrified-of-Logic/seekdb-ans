@@ -26,6 +26,7 @@
 #include "query/vector/ob_vector_index_util.h"
 #include "sql/resolver/ob_resolver_utils.h"
 #include "sql/resolver/ddl/ob_fts_index_builder_util.h"
+#include "share/ai_column/ob_ai_column_metadata_util.h"
 
 using namespace oceanbase::lib;
 using namespace oceanbase::common;
@@ -863,6 +864,36 @@ int ObCreateTableHelper::operate_schemas_() {
   if (OB_FAIL(check_inner_stat_())) {
   } else if (OB_FAIL(inner_create_table_(&arg_.ddl_stmt_str_,
                                          replace_mock_fk_parent_table_id_))) {
+  } else if (!arg_.ai_columns_.empty()) {
+    LOG_INFO("[aicol] create table has ai columns", K(arg_.ai_columns_.count()),
+             K(new_tables_.count()));
+    common::ObSEArray<share::ObAIColumnSchema, 4> ai_columns;
+    const ObTableSchema *main_table = nullptr;
+    // AI columns may add JSON hidden columns, and JSON uses aux lob tables, so
+    // new_tables_ contains more than one table (main table + aux lob tables).
+    // Pick the main table by name, skipping aux lob tables.
+    for (int64_t i = 0; OB_ISNULL(main_table) && i < new_tables_.count(); ++i) {
+      const ObTableSchema &table = new_tables_.at(i);
+      LOG_INFO("[aicol] new table candidate", K(i), K(table.get_table_name_str()),
+               K(table.get_table_id()), K(static_cast<int64_t>(table.get_table_type())));
+      if (!table.is_aux_lob_table()
+          && 0 == table.get_table_name_str().compare(arg_.schema_.get_table_name_str())) {
+        main_table = &table;
+      }
+    }
+    if (OB_FAIL(ai_columns.assign(arg_.ai_columns_))) {
+    } else if (OB_ISNULL(main_table)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("main table not found for ai column", K(ret), K(new_tables_.count()),
+               K(arg_.schema_.get_table_name_str()));
+    } else if (OB_FAIL(share::ObAIColumnMetadataUtil::fill_hidden_column_ids(
+                   *main_table, main_table->get_table_id(), ai_columns))) {
+    } else if (OB_FAIL(share::ObAIColumnMetadataUtil::write_ai_columns(get_trans_(), ai_columns))) {
+    } else {
+      LOG_INFO("[aicol] create table metadata written", K(ai_columns.count()));
+    }
+  } else {
+    LOG_INFO("[aicol] create table no ai columns in arg", K(arg_.ai_columns_.count()));
   }
   return ret;
 }

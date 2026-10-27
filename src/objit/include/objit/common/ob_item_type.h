@@ -2160,10 +2160,12 @@ typedef enum ObItemType
 
   T_LOAD_TIME_ZONE_INFO = 4764,
 
-  // item type ids 4765-4771 are reserved after removing Oracle wrapped PL units.
-  T_RESERVED_4765 = 4765,
-  T_RESERVED_4766 = 4766,
-  T_RESERVED_4767 = 4767,
+  // AI column DDL nodes.
+  T_AI_COLUMN = 4765,
+  T_AI_COLUMN_OPTIONS = 4766,
+  T_AI_COLUMN_RETRY = 4767,
+
+  // item type ids 4768-4771 are reserved after removing Oracle wrapped PL units.
   T_RESERVED_4768 = 4768,
   T_RESERVED_4769 = 4769,
   T_RESERVED_4770 = 4770,

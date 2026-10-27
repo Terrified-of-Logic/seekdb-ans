@@ -48,6 +48,7 @@
 #include "ob_ddl_args.h"
 #include "share/inner_table/ob_load_inner_table_schema.h"
 #include "share/ai_service/ob_ai_model_info.h"
+#include "share/ai_column/ob_ai_column_struct.h"
 
 namespace oceanbase
 {
@@ -1268,7 +1269,12 @@ public:
                K_(lock_session_id),
                K_(lock_session_create_ts),
                K_(lock_priority),
-               K_(data_version));
+               K_(data_version),
+               K_(ai_columns),
+               K_(ai_retry_column_name),
+               K_(ai_retry_where_sql),
+               K_(ai_retry_table_id),
+               K_(ai_retry_column_id));
 private:
   int alloc_index_arg(const ObIndexArg::IndexActionType index_action_type, ObIndexArg *&index_arg);
 public:
@@ -1302,6 +1308,13 @@ public:
   int64_t lock_session_create_ts_;
   transaction::tablelock::ObTableLockPriority lock_priority_;
   uint64_t data_version_;
+  // AI column definitions declared by ALTER TABLE ... ADD COLUMN ... AI COLUMN (...)
+  common::ObSEArray<share::ObAIColumnSchema, 4> ai_columns_;
+  // ALTER TABLE ... RETRY AI COLUMN <col> [WHERE <predicate>]
+  common::ObString ai_retry_column_name_;
+  common::ObString ai_retry_where_sql_;
+  int64_t ai_retry_table_id_ = common::OB_INVALID_ID;
+  int64_t ai_retry_column_id_ = common::OB_INVALID_ID;
   int serialize_index_args(char *buf, const int64_t data_len, int64_t &pos) const;
   int deserialize_index_args(const char *buf, const int64_t data_len, int64_t &pos);
   int64_t get_index_args_serialize_size() const;
@@ -1948,6 +1961,8 @@ public:
   share::schema::ObErrorInfo error_info_;
   bool is_alter_view_;
   common::ObSArray<oceanbase::share::schema::ObDependencyInfo> dep_infos_;
+  // AI column definitions declared by CREATE TABLE ... AI COLUMN (...) WITH (...)
+  common::ObSEArray<share::ObAIColumnSchema, 4> ai_columns_;
 };
 
 

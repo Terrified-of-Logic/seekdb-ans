@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "config_bridge.h"
+#include "sql/engine/dml/ob_ai_column_dml_handler.h"
 #include "sql/engine/dml/ob_dml_service.h"
 #include "sql/engine/expr/ob_datum_cast.h"
 #include "share/rc/ob_server_runtime.h"
@@ -2179,6 +2180,10 @@ int ObDMLService::handle_after_processing_multi_row(ObDMLModifyRowsList *dml_mod
           } else if (OB_FAIL(TriggerHandle::do_handle_after_row(op, dml_ctdef.trig_ctdef_, dml_rtdef.trig_rtdef_, dml_event))) {
           }
         }
+        // maintain AI column tasks for this row (same transaction)
+        if (OB_SUCC(ret) && OB_FAIL(ObAIColumnDMLHandler::handle_after_row(modify_row))) {
+          LOG_WARN("failed to maintain ai column task", K(ret));
+        }
       }
     }
 
@@ -2218,6 +2223,10 @@ int ObDMLService::handle_after_processing_single_row(ObDMLModifyRowNode &modify_
       }
     }
     if (OB_SUCC(ret) && OB_FAIL(TriggerHandle::do_handle_after_row(op, dml_ctdef.trig_ctdef_, dml_rtdef.trig_rtdef_, dml_event))) {
+    }
+    // maintain AI column tasks for this row (same transaction)
+    if (OB_SUCC(ret) && OB_FAIL(ObAIColumnDMLHandler::handle_after_row(modify_row))) {
+      LOG_WARN("failed to maintain ai column task", K(ret));
     }
   }
   return ret;

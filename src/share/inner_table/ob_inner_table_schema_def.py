@@ -2441,10 +2441,64 @@ all_ai_model_endpoint_def = dict(
         ('request_model_name', 'varchar:128', 'true'),
         ('parameters', 'varchar:2048', 'true'),
         ('request_transform_fn', 'varchar:64', 'true'),
-        ('response_transform_fn', 'varchar:64', 'true')
+        ('response_transform_fn', 'varchar:64', 'true'),
+        ('max_concurrency', 'int', 'true')
     ]
 )
 def_table_schema(**all_ai_model_endpoint_def)
+
+
+# 1131: __all_ai_column
+all_ai_column_def = dict(
+    owner = 'ai-column',
+    table_name = '__all_ai_column',
+    table_id = '1131',
+    table_type = 'SYSTEM_TABLE',
+    gm_columns = ['gmt_create', 'gmt_modified'],
+    rowkey_columns = [
+      ('table_id', 'int'),
+      ('column_id', 'int')
+    ],
+    normal_columns = [
+        ('column_name', 'varchar:OB_MAX_COLUMN_NAME_LENGTH'),
+        ('normalized_expr', 'longtext', 'true'),
+        ('max_retries', 'int', 'false', '0'),
+        ('sync_mode', 'varchar:128', 'false', 'async'),
+        ('system_prompt', 'longtext', 'true'),
+        ('unfinished_count', 'int', 'false', '0'),
+        ('state_column_id', 'int', 'false', '-1'),
+        ('request_column_id', 'int', 'false', '-1'),
+        ('result_spec_column_id', 'int', 'false', '-1'),
+        ('dep_columns', 'longtext', 'true'),
+        ('ai_model_name', 'varchar:128', 'true'),
+        ('user_expr', 'longtext', 'true')
+    ]
+)
+def_table_schema(**all_ai_column_def)
+
+# 1132: __all_ai_column_task
+all_ai_column_task_def = dict(
+    owner = 'ai-column',
+    table_name = '__all_ai_column_task',
+    table_id = '1132',
+    table_type = 'SYSTEM_TABLE',
+    gm_columns = ['gmt_create', 'gmt_modified'],
+    rowkey_columns = [
+      ('table_id', 'int'),
+      ('column_id', 'int'),
+      ('rowkey_predicate', 'varchar:1024')
+    ],
+    normal_columns = [
+        ('request_id', 'int', 'false', '-1'),
+        ('eligible_ts', 'timestamp:6', 'true'),
+        ('state', 'int', 'false', '0'),
+        ('retry_count', 'int', 'false', '0'),
+        ('lease_owner', 'int', 'false', '0'),
+        ('lease_expire_ts', 'timestamp:6', 'true'),
+        ('error_msg', 'varchar:OB_MAX_ERROR_MSG_LEN', 'true')
+    ]
+)
+def_table_schema(**all_ai_column_task_def)
 
 
 all_objauth_mysql_def = dict(
@@ -13819,10 +13873,48 @@ def_table_schema(
       REQUEST_MODEL_NAME,
       PARAMETERS,
       REQUEST_TRANSFORM_FN,
-      RESPONSE_TRANSFORM_FN
+      RESPONSE_TRANSFORM_FN,
+      MAX_CONCURRENCY
     FROM oceanbase.__all_ai_model_endpoint WHERE ENDPOINT_ID != -1;
   """.replace("\n", " ")
 )
+
+# 21665: DBA_OB_AI_COLUMNS
+def_table_schema(
+  owner           = 'ai-column',
+  table_name      = 'DBA_OB_AI_COLUMNS',
+  table_id        = '21665',
+  table_type      = 'SYSTEM_VIEW',
+  rowkey_columns  = [],
+  normal_columns  = [],
+  gm_columns      = [],
+  view_definition =
+  """
+    SELECT TABLE_ID, COLUMN_ID, COLUMN_NAME, NORMALIZED_EXPR,
+           MAX_RETRIES, SYNC_MODE, SYSTEM_PROMPT, STATE_COLUMN_ID,
+           REQUEST_COLUMN_ID, RESULT_SPEC_COLUMN_ID, DEP_COLUMNS,
+           AI_MODEL_NAME, USER_EXPR
+    FROM oceanbase.__all_ai_column
+  """.replace("\n", " ")
+)
+
+# 21666: DBA_OB_AI_COLUMN_TASKS
+def_table_schema(
+  owner           = 'ai-column',
+  table_name      = 'DBA_OB_AI_COLUMN_TASKS',
+  table_id        = '21666',
+  table_type      = 'SYSTEM_VIEW',
+  rowkey_columns  = [],
+  normal_columns  = [],
+  gm_columns      = [],
+  view_definition =
+  """
+    SELECT TABLE_ID, COLUMN_ID, REQUEST_ID, ROWKEY_PREDICATE,
+           ELIGIBLE_TS, STATE, RETRY_COUNT, LEASE_OWNER, LEASE_EXPIRE_TS, ERROR_MSG
+    FROM oceanbase.__all_ai_column_task
+  """.replace("\n", " ")
+)
+
 
 def_table_schema(
   owner           = 'jingyu.cr',
