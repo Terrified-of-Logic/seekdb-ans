@@ -884,6 +884,9 @@ int ObPluginVectorIndexAdaptor::init_mem_data(ObVectorIndexRecordType type, ObVe
       }
 
       if (OB_SUCC(ret)) {
+        ret = obvsag::enable_hipvs_snapshot(snap_data_->index_);
+      }
+      if (OB_SUCC(ret)) {
         snap_data_->set_inited();
         LOG_INFO("create snap data success.", K(ret), KP(snap_data_->index_), K(lbt())); // remove later
       }
@@ -940,6 +943,9 @@ int ObPluginVectorIndexAdaptor::init_snap_data_without_lock(ObVectorIndexAlgorit
       }
     }
 
+    if (OB_SUCC(ret)) {
+      ret = obvsag::enable_hipvs_snapshot(snap_data_->index_);
+    }
     if (OB_SUCC(ret)) {
       snap_data_->set_inited();
       LOG_INFO("create snap data success.", K(ret), KP(snap_data_->index_));
@@ -1889,6 +1895,10 @@ int ObPluginVectorIndexAdaptor::check_if_need_optimize(ObVectorQueryAdaptorResul
 int ObPluginVectorIndexAdaptor::set_snapshot_key_prefix(uint64_t tablet_id, uint64_t scn, uint64_t max_length)
 {
   int ret = OB_SUCCESS;
+  if (OB_NOT_NULL(snap_data_) && OB_NOT_NULL(snap_data_->index_) &&
+      OB_FAIL(obvsag::finish_hipvs_snapshot(snap_data_->index_))) {
+    return ret;
+  }
   int64_t pos = 0;
 
   if (OB_ISNULL(get_allocator())) {

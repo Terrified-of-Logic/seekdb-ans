@@ -126,6 +126,9 @@ int add_index(VectorIndexPtr& index_handler, float* vector, int64_t* ids, int di
 int add_index(VectorIndexPtr &index_handler, uint32_t *lens, uint32_t *dims, float *vals, int64_t *ids, int size,
     char *extra_info = nullptr);
 int get_index_number(VectorIndexPtr& index_handler, int64_t &size);
+// Snapshot-only opt-in. Ordinary incremental and CPU handles retain VSAG behavior.
+int enable_hipvs_snapshot(VectorIndexPtr index_handler);
+int finish_hipvs_snapshot(VectorIndexPtr index_handler);
 int get_index_type(VectorIndexPtr& index_handler);
 int cal_distance_by_id(VectorIndexPtr& index_handler, const float* vector, const int64_t* ids, int64_t count, const float *&distances);
 int cal_distance_by_id(VectorIndexPtr& index_handler, uint32_t len, uint32_t *dims, float *vals, const int64_t *ids,

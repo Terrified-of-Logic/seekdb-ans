@@ -28,6 +28,7 @@
 #include "lib/utility/ob_print_utils.h"
 #include "lib/oblog/ob_log.h"
 #include "lib/worker.h"
+#include "hipvs_snapshot.h"
 
 namespace oceanbase {
 namespace common {
@@ -168,9 +169,17 @@ public:
                  bool need_extra_info, const char *&extra_infos,
                  void *&iter_ctx, bool is_last_search, void *allocator);
   int immutable_optimize();
+  HipvsSnapshot hipvs_snapshot_;
 
   std::shared_ptr<vsag::Index> &get_index() { return index_; }
-  void set_index(std::shared_ptr<vsag::Index> hnsw) { index_ = hnsw; }
+  void set_index(std::shared_ptr<vsag::Index> hnsw)
+  {
+    // Deserialized snapshots already contain a native graph; never stage a rebuild.
+    index_ = hnsw;
+    hipvs_snapshot_.enabled = false;
+    std::vector<float>().swap(hipvs_snapshot_.vectors);
+    std::vector<int64_t>().swap(hipvs_snapshot_.ids);
+  }
   vsag::Allocator *get_allocator() const { return allocator_; }
   inline bool get_use_static() const { return use_static_; }
   inline int get_max_degree() const { return max_degree_; }
@@ -236,12 +245,23 @@ int HnswIndexHandler::build_index(const vsag::DatasetPtr &base)
 
 int HnswIndexHandler::get_index_number()
 {
+  if (hipvs_snapshot_.enabled) {
+    std::lock_guard<std::mutex> guard(hipvs_snapshot_.mutex);
+    if (hipvs_snapshot_.enabled) { return hipvs_snapshot_.ids.size(); }
+  }
   return index_->GetNumElements();
 }
 
 int HnswIndexHandler::add_index(const vsag::DatasetPtr &incremental)
 {
   int ret = OB_SUCCESS;
+  if (hipvs_snapshot_.enabled) {
+    std::lock_guard<std::mutex> guard(hipvs_snapshot_.mutex);
+    if (hipvs_snapshot_.enabled) {
+      return hipvs_snapshot_.append(incremental->GetFloat32Vectors(), incremental->GetIds(),
+                                    incremental->GetNumElements(), dim_);
+    }
+  }
   tl::expected<std::vector<int64_t>, Error> result = index_->Add(incremental);
   if (result.has_value()) {
     LOG_DEBUG("add index success", K(get_index_number()));
@@ -1080,6 +1100,40 @@ int add_index(VectorIndexPtr &index_handler, uint32_t *lens, uint32_t *dims, flo
   return ret;
 }
 
+int enable_hipvs_snapshot(VectorIndexPtr index_handler)
+{
+#ifndef _WIN32
+  const char *helper = std::getenv("SEEKDB_HIPVS_BUILD_HELPER");
+  if (helper && *helper) {
+    HnswIndexHandler *hnsw = static_cast<HnswIndexHandler *>(index_handler);
+    if (!hnsw) { return OB_INVALID_ARGUMENT; }
+    if (hnsw->get_index_type() == HNSW_TYPE && hnsw->get_extra_info_size() == 0 &&
+        strcmp(hnsw->get_dtype(), "float32") == 0 && strcmp(hnsw->get_metric(), "l2") == 0) {
+      if (helper[0] != '/' || access(helper, X_OK) != 0) { return OB_INVALID_ARGUMENT; }
+      hnsw->hipvs_snapshot_.enabled = true;
+    }
+  }
+#endif
+  return OB_SUCCESS;
+}
+
+int finish_hipvs_snapshot(VectorIndexPtr index_handler)
+{
+  int ret = OB_SUCCESS;
+  if (!index_handler) { return OB_INVALID_ARGUMENT; }
+  HnswIndexHandler *hnsw = static_cast<HnswIndexHandler *>(index_handler);
+  if (!hnsw->hipvs_snapshot_.enabled) { return OB_SUCCESS; }
+  std::lock_guard<std::mutex> guard(hnsw->hipvs_snapshot_.mutex);
+  try {
+    return hnsw->hipvs_snapshot_.finish(hnsw->get_index(), hnsw->get_dim(),
+                                       hnsw->get_max_degree(), hnsw->get_ef_construction());
+  } catch (const std::bad_alloc &) { return OB_ALLOCATE_MEMORY_FAILED; }
+  catch (const std::exception &e) {
+    LOG_WARN("HIPVS_BUILD_EXCEPTION no CPU fallback", "reason", e.what());
+    return OB_ERR_VSAG_RETURN_ERROR;
+  }
+}
+
 int get_index_type(VectorIndexPtr &index_handler)
 {
   HnswIndexHandler *hnsw = static_cast<HnswIndexHandler *>(index_handler);
@@ -1273,6 +1327,7 @@ int fserialize(VectorIndexPtr &index_handler, std::ostream &out_stream)
     ret = OB_INVALID_ARGUMENT;
   } else {
     HnswIndexHandler *hnsw = static_cast<HnswIndexHandler *>(index_handler);
+    if (OB_FAIL(finish_hipvs_snapshot(index_handler))) { return ret; }
     tl::expected<void, Error> bs = hnsw->get_index()->Serialize(out_stream);
     if (bs.has_value()) {
       LOG_INFO("[OBVSAG] serialize index success");
