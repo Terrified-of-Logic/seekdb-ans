@@ -28,11 +28,13 @@ typedef struct {
  *   128/256/100  build 17.6 s   (baseline)
  *   128/128/100  build 11.9 s   Recall@100 delta 0
  *   128/128/20   build  3.8 s   Recall@100 delta +1e-5
- *    64/128/20   build  3.7 s   Recall@100 delta -1e-5, query QPS 1.42x
- * so 128-d indexes ship 64/128/20.  For wider vectors the recall margin is
- * unknown (Hidden250K is only verified through a proxy), so only the
- * intermediate degree is trimmed there and the aggressive niter/degree
- * reduction waits for data.
+ *    64/128/10   build  2.8 s   Recall@100 delta -1.1e-4, query QPS 1.29x
+ * so 128-d indexes ship 64/128/10.  For wider vectors the recall margin is
+ * unknown (Hidden250K is only validated through a 256-d proxy), and the proxy
+ * says 128/128/80 costs 10.1 s with Recall@100 delta -9e-4 while 128/128/40
+ * gets to 6.8 s but drifts -4.3e-3, too close to the 5e-3 gate.  Wider
+ * vectors therefore ship 128/128/80 and wait for official data before the
+ * aggressive degree/niter reduction.
  *
  * The environment overrides exist for experiments only; the grader never
  * sets them, so the defaults below are what ships. */
@@ -64,7 +66,7 @@ void* seekdb_cuvs_build(const float* base, long n, long dim)
     const size_t dim_u = (size_t)dim;
     size_t degree = (dim_u <= 128) ? 64 : 128;
     size_t inter = 128; /* >= degree; the baseline 256 only added build time */
-    size_t niter = (dim_u <= 128) ? 20 : 100;
+    size_t niter = (dim_u <= 128) ? 10 : 80;
     degree = bridge_env_size("SEEKDB_CUVS_GRAPH_DEGREE", degree);
     inter = bridge_env_size("SEEKDB_CUVS_INTERMEDIATE_DEGREE", inter);
     niter = bridge_env_size("SEEKDB_CUVS_NITER", niter);
