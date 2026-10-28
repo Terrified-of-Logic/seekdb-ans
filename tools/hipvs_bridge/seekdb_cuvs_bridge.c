@@ -12,9 +12,10 @@
 #include <stdlib.h>
 
 typedef struct {
-  cuvsResources_t        res;
-  cuvsCagraIndexParams_t ip;
-  cuvsCagraIndex_t       idx;
+  cuvsResources_t         res;
+  cuvsCagraIndexParams_t  ip;
+  cuvsCagraSearchParams_t sp;  /* template only: copied per search, never mutated */
+  cuvsCagraIndex_t        idx;
   long n, dim;
 } sk_cuvs_index;
 
@@ -55,6 +56,43 @@ static size_t bridge_env_size(const char *name, size_t fallback)
   return (size_t)parsed;
 }
 
+/* Search parameters.
+ *
+ * The params object is created once per index (build/deserialize) instead of
+ * once per query; the query path only recomputes the two knobs that actually
+ * vary at run time and copies the template onto its own stack, so concurrent
+ * searches can never observe a half-written params object.
+ *
+ * itopk_size default is unchanged from the baseline: max(512, 4*topk).  The
+ * guard below only ever raises it above the cuVS default (64), exactly like the
+ * original code did, so shipping behaviour is bit-for-bit the same.  Both knobs
+ * are re-read from the environment on every search (two getenv calls, <1 us
+ * against a ~2.7 ms single-query search) so a parameter sweep can drive one
+ * resident index instead of rebuilding a 250K graph per data point.
+ *
+ * Graph degree is NOT a search knob: cuVS takes it at build time only
+ * (cuvsCagraIndexParams_t), so the query-side degree is whatever
+ * SEEKDB_CUVS_GRAPH_DEGREE produced during the build.  SEEKDB_CUVS_QUERY_DEGREE
+ * is therefore deliberately NOT implemented (struct cuvsCagraSearchParams has
+ * no degree field and lowering it at query time would mean rebuilding the
+ * graph); setting it only prints a warning at build time. */
+static size_t bridge_search_itopk(long topk)
+{
+  const size_t k = topk > 0 ? (size_t)topk : 0;
+  size_t itopk = bridge_env_size("SEEKDB_CUVS_ITOPK", 0);
+  if (itopk == 0) {
+    itopk = k * 4;
+    if (itopk < 512) itopk = 512;
+  }
+  return itopk < k ? k : itopk;  /* cuVS needs itopk_size >= topk */
+}
+
+static size_t bridge_search_width(void)
+{
+  const size_t width = bridge_env_size("SEEKDB_CUVS_SEARCH_WIDTH", 4);
+  return width < 1 ? 1 : width;
+}
+
 void* seekdb_cuvs_build(const float* base, long n, long dim)
 {
   sk_cuvs_index* h = (sk_cuvs_index*)calloc(1, sizeof(*h));
@@ -69,6 +107,7 @@ void* seekdb_cuvs_build(const float* base, long n, long dim)
   dset.dl_tensor.shape = ds; dset.dl_tensor.strides = 0; dset.dl_tensor.byte_offset = 0;
 
   if (cuvsCagraIndexParamsCreate(&h->ip) != CUVS_SUCCESS) goto fail_res;
+  if (cuvsCagraSearchParamsCreate(&h->sp) != CUVS_SUCCESS) goto fail_ip;
   {
     const size_t dim_u = (size_t)dim;
     size_t degree = (dim_u <= 128) ? 48 : 128;
@@ -84,13 +123,28 @@ void* seekdb_cuvs_build(const float* base, long n, long dim)
     h->ip->nn_descent_niter = niter;
     fprintf(stderr, "[seekdb_cuvs] build n=%ld dim=%ld degree=%zu inter=%zu niter=%zu\n",
             n, dim, degree, inter, niter);
+    {
+      const size_t itopk_env = bridge_env_size("SEEKDB_CUVS_ITOPK", 0);
+      const size_t width_env = bridge_env_size("SEEKDB_CUVS_SEARCH_WIDTH", 4);
+      if (itopk_env != 0) {
+        fprintf(stderr, "[seekdb_cuvs] search itopk override: itopk=%zu\n", itopk_env);
+      }
+      if (width_env != 4) {
+        fprintf(stderr, "[seekdb_cuvs] search width override: width=%zu\n", width_env);
+      }
+      if (getenv("SEEKDB_CUVS_QUERY_DEGREE") != NULL) {
+        fprintf(stderr, "[seekdb_cuvs] SEEKDB_CUVS_QUERY_DEGREE is not supported "
+                        "(CAGRA degree is a build-time parameter); ignoring\n");
+      }
+    }
   }
-  if (cuvsCagraIndexCreate(&h->idx)      != CUVS_SUCCESS) goto fail_ip;
+  if (cuvsCagraIndexCreate(&h->idx)      != CUVS_SUCCESS) goto fail_sp;
   if (cuvsCagraBuild(h->res, h->ip, &dset, h->idx) != CUVS_SUCCESS) goto fail_idx;
   h->n = n; h->dim = dim;
   return h;
 
 fail_idx: cuvsCagraIndexDestroy(h->idx);
+fail_sp:  cuvsCagraSearchParamsDestroy(h->sp);
 fail_ip:  cuvsCagraIndexParamsDestroy(h->ip);
 fail_res: cuvsResourcesDestroy(h->res); free(h);
   fprintf(stderr, "[seekdb_cuvs] build failed: %s\n", cuvsGetLastErrorText());
@@ -103,7 +157,7 @@ int seekdb_cuvs_search(void* handle, const float* query, long nq, long topk,
   sk_cuvs_index* h = (sk_cuvs_index*)handle;
   if (!h) return 1;
   int rc = 0;
-  float* qd = 0; unsigned* nd = 0; float* dd = 0; cuvsCagraSearchParams_t sp = 0;
+  float* qd = 0; unsigned* nd = 0; float* dd = 0;
   if (cuvsRMMAlloc(h->res, (void**)&qd, sizeof(float)*nq*h->dim)  != CUVS_SUCCESS) { rc=10; goto done; }
   if (cuvsRMMAlloc(h->res, (void**)&nd, sizeof(unsigned)*nq*topk) != CUVS_SUCCESS) { rc=11; goto done; }
   if (cuvsRMMAlloc(h->res, (void**)&dd, sizeof(float)*nq*topk)    != CUVS_SUCCESS) { rc=12; goto done; }
@@ -115,20 +169,20 @@ int seekdb_cuvs_search(void* handle, const float* query, long nq, long topk,
     qt.dl_tensor.shape=qs; qt.dl_tensor.strides=0; qt.dl_tensor.byte_offset=0;
     nt=qt; nt.dl_tensor.data=nd; nt.dl_tensor.dtype.code=kDLUInt; nt.dl_tensor.shape=nsh;
     dt=qt; dt.dl_tensor.data=dd; dt.dl_tensor.dtype.code=kDLFloat; dt.dl_tensor.shape=dsh;
-    if (cuvsCagraSearchParamsCreate(&sp) != CUVS_SUCCESS) { rc=14; goto done; }
+    /* Stack copy of the persistent template: only itopk_size/search_width are
+     * adjusted, so no two threads ever write the same params object. */
+    struct cuvsCagraSearchParams sp = *h->sp;
     {
-      size_t required_itopk = (size_t)topk * 4;
-      if (required_itopk < 512) required_itopk = 512;
-      if (sp->itopk_size < required_itopk) sp->itopk_size = required_itopk;
-      sp->search_width = 4;
+      const size_t itopk = bridge_search_itopk(topk);
+      if (sp.itopk_size < itopk) sp.itopk_size = itopk;
+      sp.search_width = bridge_search_width();
     }
     cuvsFilter f; f.type=NO_FILTER; f.addr=(uintptr_t)0;
-    if (cuvsCagraSearch(h->res, sp, h->idx, &qt, &nt, &dt, f) != CUVS_SUCCESS) { rc=15; goto done; }
+    if (cuvsCagraSearch(h->res, &sp, h->idx, &qt, &nt, &dt, f) != CUVS_SUCCESS) { rc=15; goto done; }
     if (cudaMemcpy(out_ids, nd, sizeof(unsigned)*nq*topk, cudaMemcpyDefault) != cudaSuccess) { rc=16; goto done; }
     if (out_dist) cudaMemcpy(out_dist, dd, sizeof(float)*nq*topk, cudaMemcpyDefault);
   }
 done:
-  if (sp) cuvsCagraSearchParamsDestroy(sp);
   if (dd) cuvsRMMFree(h->res, dd, sizeof(float)*nq*topk);
   if (nd) cuvsRMMFree(h->res, nd, sizeof(unsigned)*nq*topk);
   if (qd) cuvsRMMFree(h->res, qd, sizeof(float)*nq*h->dim);
@@ -141,6 +195,7 @@ void seekdb_cuvs_free(void* handle)
   sk_cuvs_index* h = (sk_cuvs_index*)handle;
   if (!h) return;
   cuvsCagraIndexDestroy(h->idx);
+  cuvsCagraSearchParamsDestroy(h->sp);
   cuvsCagraIndexParamsDestroy(h->ip);
   cuvsResourcesDestroy(h->res);
   free(h);
@@ -164,7 +219,8 @@ void* seekdb_cuvs_deserialize(const char* filename, long n, long dim)
   if (!index) return NULL;
   if (cuvsResourcesCreate(&index->res) != CUVS_SUCCESS) goto fail;
   if (cuvsCagraIndexParamsCreate(&index->ip) != CUVS_SUCCESS) goto fail_res;
-  if (cuvsCagraIndexCreate(&index->idx) != CUVS_SUCCESS) goto fail_ip;
+  if (cuvsCagraSearchParamsCreate(&index->sp) != CUVS_SUCCESS) goto fail_ip;
+  if (cuvsCagraIndexCreate(&index->idx) != CUVS_SUCCESS) goto fail_sp;
   if (cuvsCagraDeserialize(index->res, filename, index->idx) != CUVS_SUCCESS) goto fail_idx;
   {
     int64_t actual_n = 0;
@@ -182,6 +238,8 @@ void* seekdb_cuvs_deserialize(const char* filename, long n, long dim)
   return index;
 fail_idx:
   cuvsCagraIndexDestroy(index->idx);
+fail_sp:
+  cuvsCagraSearchParamsDestroy(index->sp);
 fail_ip:
   cuvsCagraIndexParamsDestroy(index->ip);
 fail_res:
