@@ -304,6 +304,10 @@ private:
   
   int add_alias_from_dot_notation(ObRawExpr *sel_expr, SelectItem& select_item);
 
+  // Constrain the parameterized arguments of a TOKENIZE() projection so a cached
+  // plan is only reused for identical argument values (result is folded later).
+  int add_tokenize_const_param_constraints(ObRawExpr *expr);
+
   int check_and_mark_aggr_in_having_scope(ObSelectStmt *select_stmt);
   int mark_aggr_in_order_by_scope(ObSelectStmt *select_stmt);
   int check_aggr_in_select_scope(ObSelectStmt *select_stmt);

@@ -44,6 +44,26 @@ namespace oceanbase
 namespace storage
 {
 
+// Byte wise comparison, equivalent to ObCharset::strcmp(CS_TYPE_UTF8MB4_BIN, ...) for
+// the valid UTF-8 single character words kept in a range: UTF-8 preserves the code
+// point order in the byte order, and the length tie break implements "the shorter
+// prefix is smaller". This removes the three charset indirections of
+// ObCharset::strcmp from a comparison that runs for every character of a token, and
+// for every range in the fallback scan.
+static int ft_bin_cmp(const ObString &lhs, const ObString &rhs)
+{
+  const int64_t lhs_len = lhs.length();
+  const int64_t rhs_len = rhs.length();
+  const int64_t min_len = lhs_len < rhs_len ? lhs_len : rhs_len;
+  int cmp = 0;
+  if (min_len > 0) {
+    cmp = memcmp(lhs.ptr(), rhs.ptr(), static_cast<size_t>(min_len));
+  }
+  if (0 == cmp) {
+    cmp = lhs_len < rhs_len ? -1 : (lhs_len > rhs_len ? 1 : 0);
+  }
+  return cmp;
+}
 
 int ObFTRangeDict::build_cache_from_ik_dict(const ObFTDictDesc &desc, ObFTCacheRangeContainer &range_container)
 {
@@ -307,10 +327,28 @@ int ObFTRangeDict::init()
     ret = OB_INIT_TWICE;
   } else {
     if (OB_FAIL(build_dict_from_cache(*range_container_))) {
+    } else {
+      check_ranges_ordered();
     }
     is_inited_ = true;
   }
   return ret;
+}
+
+void ObFTRangeDict::check_ranges_ordered()
+{
+  bool ordered = true;
+  for (int64_t i = 0; ordered && i < range_dicts_.size(); ++i) {
+    const ObString cur_start = range_dicts_[i].start_.get_word();
+    const ObString cur_end = range_dicts_[i].end_.get_word();
+    if (ft_bin_cmp(cur_start, cur_end) > 0) {
+      ordered = false;
+    } else if (i > 0 && ft_bin_cmp(range_dicts_[i - 1].end_.get_word(), cur_start) >= 0) {
+      // strictly ascending and disjoint
+      ordered = false;
+    }
+  }
+  ranges_ascending_ = ordered;
 }
 int ObFTRangeDict::build_ranges(const ObFTDictDesc &desc,
                                 ObIFTDictIterator &iter,
@@ -381,23 +419,62 @@ int ObFTRangeDict::match_with_hit(const ObString &single_word,
 int ObFTRangeDict::find_first_char_range(const ObString &single_word, ObIFTDict *&dict) const
 {
   int ret = OB_SUCCESS;
-  bool found = false;
-  for (int i = 0; OB_SUCC(ret) && !found && i < range_dicts_.size(); ++i) {
-    if (ObCharset::strcmp(ObCollationType::CS_TYPE_UTF8MB4_BIN,
-                          range_dicts_[i].start_.get_word(),
-                          single_word)
-            <= 0
-        && ObCharset::strcmp(ObCollationType::CS_TYPE_UTF8MB4_BIN,
-                             range_dicts_[i].end_.get_word(),
-                             single_word)
-               >= 0) {
-      dict = range_dicts_[i].dict_;
-      found = true;
-    }
+  dict = nullptr;
+  const int64_t range_cnt = range_dicts_.size();
+  // Consecutive CJK characters of one document almost always fall into the same
+  // range, so remember the last range resolved by this thread and validate it with
+  // two boundary comparisons before falling back to the binary search. The dict is
+  // immutable (built once by the shared dict hub), hence the cached index stays
+  // valid for the lifetime of the object.
+  static thread_local const ObFTRangeDict *cached_dict = nullptr;
+  static thread_local int64_t cached_range = -1;
+  if (OB_LIKELY(range_cnt > 0 && ranges_ascending_ && cached_dict == this
+                   && cached_range >= 0 && cached_range < range_cnt
+                   && ft_bin_cmp(range_dicts_[cached_range].start_.get_word(), single_word) <= 0
+                   && ft_bin_cmp(range_dicts_[cached_range].end_.get_word(), single_word) >= 0)) {
+    dict = range_dicts_[cached_range].dict_;
+    return ret;
   }
-  if (!found) {
-    // not found, dis match
+  if (OB_UNLIKELY(range_cnt <= 0)) {
     ret = OB_ENTRY_NOT_EXIST;
+  } else if (ranges_ascending_) {
+    // The ranges are strictly ascending and disjoint, so at most one range can hold the
+    // word and it is the last range whose start is <= the word: binary search that
+    // candidate and then check its end boundary, exactly like the linear scan did.
+    int64_t low = 0;
+    int64_t high = range_cnt - 1;
+    int64_t candidate = -1;
+    while (low <= high) {
+      const int64_t mid = low + ((high - low) >> 1);
+      if (ft_bin_cmp(range_dicts_[mid].start_.get_word(), single_word) <= 0) {
+        candidate = mid;
+        low = mid + 1;
+      } else {
+        high = mid - 1;
+      }
+    }
+    if (candidate >= 0
+        && ft_bin_cmp(range_dicts_[candidate].end_.get_word(), single_word) >= 0) {
+      dict = range_dicts_[candidate].dict_;
+      cached_dict = this;
+      cached_range = candidate;
+    } else {
+      ret = OB_ENTRY_NOT_EXIST;
+    }
+  } else {
+    // Weird dictionary (ranges not ordered or overlapping): keep the original scan.
+    bool found = false;
+    for (int64_t i = 0; OB_SUCC(ret) && !found && i < range_cnt; ++i) {
+      if (ft_bin_cmp(range_dicts_[i].start_.get_word(), single_word) <= 0
+          && ft_bin_cmp(range_dicts_[i].end_.get_word(), single_word) >= 0) {
+        dict = range_dicts_[i].dict_;
+        found = true;
+      }
+    }
+    if (!found) {
+      // not found, dis match
+      ret = OB_ENTRY_NOT_EXIST;
+    }
   }
   return ret;
 }

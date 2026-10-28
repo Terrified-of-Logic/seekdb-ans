@@ -22,6 +22,8 @@
 #include "sql/resolver/dml/ob_group_by_checker.h"
 #include "sql/resolver/dml/ob_insert_resolver.h"
 #include "sql/engine/expr/ob_expr_version.h"
+#include "sql/plan_cache/ob_plan_cache_util.h"
+#include "sql/resolver/expr/ob_raw_expr_util.h"
 #include "sql/optimizer/ob_optimizer_util.h"
 #include "sql/rewrite/ob_transform_utils.h"
 #include "sql/resolver/cmd/ob_load_data_stmt.h"
@@ -1583,6 +1585,7 @@ int ObSelectResolver::resolve_field_list(const ParseNode &node)
     if (OB_FAIL(ret)) {
       /*do nothing*/
     } else if (OB_FAIL(set_select_item(select_item, is_auto_gen))) {
+    } else if (OB_FAIL(add_tokenize_const_param_constraints(select_item.expr_))) {
     } else if (is_only_full_group_by_on(session_info_->get_sql_mode())) {
       if (OB_FAIL(standard_group_checker_.add_unsettled_expr(select_item.expr_))) {
       }
@@ -1592,6 +1595,57 @@ int ObSelectResolver::resolve_field_list(const ParseNode &node)
     }
   } // end for
 
+  return ret;
+}
+
+// TOKENIZE() calls whose string arguments were parameterized by the resolver get
+// their result constant-folded during rewriting (see ObTransformPreProcess). The
+// folded value depends on the actual parameter values, so a cached plan must not
+// be reused when those values change: register the parameterized arguments as
+// plan-cache const constraints, exactly like LIMIT/group-by constants. Identical
+// literal statements then still hit the cached (folded) plan.
+int ObSelectResolver::add_tokenize_const_param_constraints(ObRawExpr *expr)
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(expr) || OB_ISNULL(params_.query_ctx_) || OB_ISNULL(params_.param_list_)) {
+    // e.g. prepare protocol: no literal parameter list to constrain
+  } else if (T_FUN_TOKENIZE == expr->get_expr_type()) {
+    ObPCConstParamInfo const_param_info;
+    // The folder treats the whole argument as one static constant expression, so
+    // every parameterized literal nested anywhere below it (CONCAT('a', ?), UPPER(?),
+    // arithmetic on literals, ...) must constrain the cached plan, not only the
+    // direct TOKENIZE arguments. Collect the parameters recursively.
+    ObSEArray<ObRawExpr *, 4> params;
+    if (OB_FAIL(ObRawExprUtils::extract_params(expr, params))) {
+    }
+    for (int64_t i = 0; OB_SUCC(ret) && i < params.count(); ++i) {
+      ObRawExpr *param = params.at(i);
+      int64_t param_idx = -1;
+      if (OB_ISNULL(param)) {
+        ret = OB_ERR_UNEXPECTED;
+      } else if (T_QUESTIONMARK != param->get_expr_type()) {
+        // not a parameterized literal, nothing to constrain
+      } else if (FALSE_IT(param_idx = static_cast<ObConstRawExpr *>(param)->get_value().get_unknown())) {
+      } else if (OB_UNLIKELY(param_idx < 0 || param_idx >= params_.param_list_->count())) {
+        // A parameter that is not part of this statement's literal parameter list
+        // (e.g. a real prepared-statement parameter) cannot be constrained here; the
+        // folder only folds static (non-dynamic) parameters, so this cannot produce
+        // a stale folded value.
+        LOG_DEBUG("skip tokenize argument param outside literal list", K(param_idx),
+                  "param_count", params_.param_list_->count());
+      } else if (OB_FAIL(const_param_info.const_idx_.push_back(param_idx))) {
+      } else if (OB_FAIL(const_param_info.const_params_.push_back(params_.param_list_->at(param_idx)))) {
+      }
+    }
+    if (OB_SUCC(ret) && !const_param_info.const_idx_.empty()
+        && OB_FAIL(params_.query_ctx_->all_plan_const_param_constraints_.push_back(const_param_info))) {
+    }
+  } else {
+    for (int64_t i = 0; OB_SUCC(ret) && i < expr->get_param_count(); ++i) {
+      if (OB_FAIL(SMART_CALL(add_tokenize_const_param_constraints(expr->get_param_expr(i))))) {
+      }
+    }
+  }
   return ret;
 }
 

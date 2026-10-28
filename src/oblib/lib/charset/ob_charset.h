@@ -630,6 +630,13 @@ public:
                               const int64_t buf_size,
                               int64_t &char_len);
 
+  // Overload for callers that already resolved the charset: the tokenizer
+  // decodes once per character and must not look the charset up again.
+  static int first_valid_char(const ObCharsetInfo *cs,
+                              const char *buf,
+                              const int64_t buf_size,
+                              int64_t &char_len);
+
   static int last_valid_char(const ObCollationType collation_type,
                              const char *buf,
                              const int64_t buf_size,

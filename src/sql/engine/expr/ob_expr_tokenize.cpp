@@ -86,8 +86,6 @@ int ObExprTokenize::tokenize_fulltext(const TokenizeParam &param,
   int64_t doc_len = 0;
   storage::ObFTWordMap token_map;
 
-  ObArenaAllocator tmp_parse_alloc(ObMemAttr("Tmp buffer"));
-
   if (TokenizeParam::OUTPUT_MODE::DEFAULT != mode && TokenizeParam::OUTPUT_MODE::ALL != mode) {
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(tokenize_helper.init(&allocator, param.parser_name_, param.properties_))) {
@@ -222,15 +220,51 @@ int ObExprTokenize::construct_ft_parser_inner_name(const ObString &input_str, To
 {
   int ret = OB_SUCCESS;
   storage::ObFTParser parser;
-
-  char *parser_name_buf = nullptr;
-  if (OB_ISNULL(parser_name_buf
-                = static_cast<char *>(param.allocator_.alloc(storage::OB_FT_PARSER_NAME_LENGTH)))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-  } else if (OB_FAIL(parser.init(input_str))) {
-  } else if (OB_FAIL(parser.serialize_to_str(parser_name_buf, storage::OB_FT_PARSER_NAME_LENGTH))) {
+  // "raw name -> inner name" is a deterministic transformation of a short literal
+  // that TOKENIZE performs once per row/query. Keep the last result of this thread
+  // so the hit path is a memcpy instead of an alloc + databuff_printf.
+  struct ParserNameCacheEntry
+  {
+    ParserNameCacheEntry() : input_(), output_(), input_len_(-1), output_len_(0)
+    {
+      input_[0] = '\0';
+    }
+    char input_[storage::OB_FT_PARSER_NAME_LENGTH];
+    char output_[storage::OB_FT_PARSER_NAME_LENGTH + 1];
+    int64_t input_len_;
+    int64_t output_len_;
+  };
+  static thread_local ParserNameCacheEntry name_cache;
+  const int64_t input_len = input_str.length();
+  if (OB_LIKELY(input_len > 0 && input_len < storage::OB_FT_PARSER_NAME_LENGTH
+                && name_cache.input_len_ == input_len
+                && 0 == MEMCMP(name_cache.input_, input_str.ptr(), input_len))) {
+    char *hit_buf = static_cast<char *>(param.allocator_.alloc(name_cache.output_len_ + 1));
+    if (OB_ISNULL(hit_buf)) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+    } else {
+      MEMCPY(hit_buf, name_cache.output_, name_cache.output_len_ + 1);
+      param.parser_name_ = ObString(static_cast<int32_t>(name_cache.output_len_), hit_buf);
+    }
   } else {
-    param.parser_name_ = ObString::make_string(parser_name_buf);
+    char *parser_name_buf = nullptr;
+    if (OB_ISNULL(parser_name_buf
+                  = static_cast<char *>(param.allocator_.alloc(storage::OB_FT_PARSER_NAME_LENGTH)))) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+    } else if (OB_FAIL(parser.init(input_str))) {
+    } else if (OB_FAIL(parser.serialize_to_str(parser_name_buf, storage::OB_FT_PARSER_NAME_LENGTH))) {
+    } else {
+      param.parser_name_ = ObString::make_string(parser_name_buf);
+      const int64_t output_len = param.parser_name_.length();
+      if (input_len >= 0 && input_len < storage::OB_FT_PARSER_NAME_LENGTH
+          && output_len > 0 && output_len < storage::OB_FT_PARSER_NAME_LENGTH) {
+        MEMCPY(name_cache.input_, input_str.ptr(), input_len);
+        name_cache.input_len_ = input_len;
+        MEMCPY(name_cache.output_, param.parser_name_.ptr(), output_len);
+        name_cache.output_[output_len] = '\0';
+        name_cache.output_len_ = output_len;
+      }
+    }
   }
   return ret;
 }
@@ -372,18 +406,68 @@ int ObExprTokenize::parse_parser_properties(const ObExpr &expr,
   return ret;
 }
 
+namespace
+{
+// TOKENIZE without user-given parser properties always rebuilds the very same default property
+// json for a given parser (init json document + fill in the defaults + serialize back). Keep the
+// last one of the calling thread and hand out a copy, so the repeated SQL only pays the memcpy.
+class ObTokenizeDefaultPropsCache final
+{
+public:
+  ObTokenizeDefaultPropsCache() : name_len_(0), props_len_(0), valid_(false) {}
+  bool get(const ObString &parser_name, ObIAllocator &allocator, ObString &props) const
+  {
+    bool found = false;
+    if (valid_ && parser_name.length() == name_len_
+        && 0 == MEMCMP(parser_name.ptr(), name_, name_len_)) {
+      char *buf = static_cast<char *>(allocator.alloc(props_len_));
+      if (OB_NOT_NULL(buf)) {
+        MEMCPY(buf, props_, props_len_);
+        props.assign_ptr(buf, props_len_);
+        found = true;
+      }
+    }
+    return found;
+  }
+  void put(const ObString &parser_name, const ObString &props)
+  {
+    if (parser_name.length() <= MAX_NAME_LEN && props.length() <= MAX_PROPS_LEN) {
+      MEMCPY(name_, parser_name.ptr(), parser_name.length());
+      MEMCPY(props_, props.ptr(), props.length());
+      name_len_ = parser_name.length();
+      props_len_ = props.length();
+      valid_ = true;
+    }
+  }
+private:
+  static const int64_t MAX_NAME_LEN = storage::OB_FT_PARSER_NAME_LENGTH;
+  static const int64_t MAX_PROPS_LEN = 1024;
+  char name_[MAX_NAME_LEN];
+  char props_[MAX_PROPS_LEN];
+  int32_t name_len_;
+  int32_t props_len_;
+  bool valid_;
+};
+} // namespace
+
 int ObExprTokenize::TokenizeParam::reform_parser_properties(const ObString &properties)
 {
   int ret = OB_SUCCESS;
   storage::ObFTParserJsonProps parser_properties;
+  static thread_local ObTokenizeDefaultPropsCache default_props_cache;
+  const bool use_default = properties.empty();
 
-  if (OB_FAIL(parser_properties.init())) {
+  if (use_default && default_props_cache.get(parser_name_, allocator_, properties_)) {
+    // Same json as the rebuild below would produce.
+  } else if (OB_FAIL(parser_properties.init())) {
   } else if (OB_FAIL(parser_properties.parse_from_valid_str(properties))) {
     LOG_USER_ERROR(OB_INVALID_ARGUMENT, "parser properties invalid.");
   } else if (OB_FAIL(parser_properties.rebuild_props_for_ddl(parser_name_,
                                                              ObCollationType::CS_TYPE_UTF8MB4_BIN,
                                                              true))) {
   } else if (OB_FAIL(parser_properties.to_format_json(allocator_, properties_))) {
+  } else if (use_default) {
+    default_props_cache.put(parser_name_, properties_);
   }
 
   return ret;

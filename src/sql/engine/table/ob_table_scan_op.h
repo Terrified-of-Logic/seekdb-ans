@@ -702,6 +702,11 @@ private:
   int inner_rescan_for_tsc();
 
   int inner_get_next_fts_index_row();
+  // vectorized build of a fulltext aux table: one batch holds the word rows of one source document
+  int inner_get_next_fts_index_batch(const int64_t max_row_cnt);
+  int fetch_next_fts_index_batch_doc();
+  int fill_fts_passthrough_cols(const int64_t row_cnt);
+  int init_fts_output_exprs();
   int fetch_next_fts_index_rows();
   int fill_generated_fts_cols(blocksstable::ObDatumRow *row);
   int get_output_fts_col_expr_by_type(const ObExprOperatorType &type, ObExpr *&expr);
@@ -735,6 +740,16 @@ protected:
   bool in_rescan_;
   ObDomainIndexCache domain_index_;
   ObFTIndexRowCache fts_index_;
+  // generated columns of the fulltext aux rows, in the column order of ObFTIndexRowCache rows
+  ObExpr *fts_output_exprs_[share::ObFtsIndexBuilderUtil::OB_FTS_INDEX_OR_DOC_WORD_TABLE_COL_CNT];
+  bool fts_output_exprs_inited_;
+  bool fts_batch_path_logged_;
+  // batch utilization counters of the vectorized fulltext aux build (one batch per
+  // source document, so short documents leave part of the batch unused)
+  int64_t fts_batch_cnt_;
+  int64_t fts_batch_row_cnt_;
+  int64_t fts_batch_full_cnt_;
+  int64_t fts_batch_doc_cnt_;
 
   // output_ is used to output data, TSC operator directly invokes output_::get_next_row(s),
   // it points to fold_iter_ in group rescan and iter_tree_ in normal scan.

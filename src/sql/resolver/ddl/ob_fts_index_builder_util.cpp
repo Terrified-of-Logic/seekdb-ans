@@ -25,6 +25,7 @@
 #include "data_plane/fts/ob_fts_parser_helper.h"
 #include "share/schema/ob_multi_version_schema_service.h"
 #include "share/schema/ob_schema_utils.h"
+#include "share/rc/ob_server_runtime.h"
 
 namespace oceanbase
 {
@@ -1034,8 +1035,17 @@ int ObFtsIndexBuilderUtil::generate_doc_id_column(
 int ObFtsIndexBuilderUtil::decide_parallelism(
     const share::schema::ObIndexType index_type,
     const int64_t original_parallelism,
+    const bool is_parallelism_explicit,
+    const share::schema::ObTableSchema &data_table_schema,
     int64_t &decided_parallelism)
 {
+  // The default parallel degree of an FTS index build. It is capped so that the build
+  // can not starve the rest of the machine, and it is only used when the user did not
+  // ask for a specific degree: on a low core machine a small build gets slower with
+  // more threads (measured upstream), so the whole optimisation is gated on the core
+  // count and an explicit PARALLEL(n) hint always wins.
+  static constexpr int64_t FTS_BUILD_MAX_DEFAULT_PARALLELISM = 16;
+  static constexpr int64_t FTS_BUILD_MIN_CPU_FOR_DEFAULT_PARALLELISM = 8;
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(original_parallelism <= 0)) {
     ret = OB_INVALID_ARGUMENT;
@@ -1046,9 +1056,23 @@ int ObFtsIndexBuilderUtil::decide_parallelism(
         break;
       case share::schema::ObIndexType::INDEX_TYPE_DOC_ID_ROWKEY_LOCAL:
       case share::schema::ObIndexType::INDEX_TYPE_FTS_INDEX_LOCAL:
-      case share::schema::ObIndexType::INDEX_TYPE_FTS_DOC_WORD_LOCAL:
-        decided_parallelism = MAX(original_parallelism / 3, 1L);
+      case share::schema::ObIndexType::INDEX_TYPE_FTS_DOC_WORD_LOCAL: {
+        if (original_parallelism <= 1 && !is_parallelism_explicit) {
+          const double cpu_cnt = server_cpu_count();
+          const int64_t part_cnt = data_table_schema.get_partition_num();
+          if (cpu_cnt >= static_cast<double>(FTS_BUILD_MIN_CPU_FOR_DEFAULT_PARALLELISM)
+              && part_cnt >= 1) {
+            decided_parallelism = MIN(FTS_BUILD_MAX_DEFAULT_PARALLELISM,
+                                      static_cast<int64_t>(cpu_cnt / 2));
+            decided_parallelism = MAX(decided_parallelism, 1L);
+          } else {
+            decided_parallelism = 1;
+          }
+        } else {
+          decided_parallelism = MAX(original_parallelism / 3, 1L);
+        }
         break;
+      }
       case share::schema::ObIndexType::INDEX_TYPE_NORMAL_MULTIVALUE_LOCAL:
       case share::schema::ObIndexType::INDEX_TYPE_UNIQUE_MULTIVALUE_LOCAL:
         decided_parallelism = MAX(original_parallelism / 2, 1L);
@@ -1060,6 +1084,13 @@ int ObFtsIndexBuilderUtil::decide_parallelism(
         decided_parallelism = 1;
         break;
     }
+    LOG_INFO("decide index build parallelism",
+             K(index_type),
+             K(original_parallelism),
+             K(is_parallelism_explicit),
+             K(decided_parallelism),
+             K(data_table_schema.get_partition_num()),
+             K(server_cpu_count()));
   }
   return ret;
 }

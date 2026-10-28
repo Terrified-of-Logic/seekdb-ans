@@ -376,8 +376,15 @@ struct ObDatumStrCmpImpl
   static int OB_INLINE cmp(const ObDatum &l, const ObDatum &r, int &cmp_ret,
                            const ObCollationType cs, const bool with_end_space)
   {
-    cmp_ret = ObCharset::strcmpsp(cs, l.ptr_, l.len_, r.ptr_, r.len_, with_end_space);
-    cmp_ret = cmp_ret > 0 ? 1 : (cmp_ret < 0 ? -1 : 0);
+    if (l.len_ == r.len_ && (l.ptr_ == r.ptr_ || 0 == MEMCMP(l.ptr_, r.ptr_, l.len_))) {
+      // Byte-identical strings are equal under every collation, so the collation table walk can be
+      // skipped. Sorting the words produced by a fulltext index build compares the same word over
+      // and over again, which makes this the common case there.
+      cmp_ret = 0;
+    } else {
+      cmp_ret = ObCharset::strcmpsp(cs, l.ptr_, l.len_, r.ptr_, r.len_, with_end_space);
+      cmp_ret = cmp_ret > 0 ? 1 : (cmp_ret < 0 ? -1 : 0);
+    }
     return OB_SUCCESS;
   }
 };
