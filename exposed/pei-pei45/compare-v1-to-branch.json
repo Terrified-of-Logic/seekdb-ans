@@ -1,0 +1,367 @@
+{
+  "url": "https://api.github.com/repos/pei-pei45/seekdb/compare/08c76418a8e1fef3c1aae83010658ff56a4faa57...9d0b421fb6",
+  "html_url": "https://github.com/pei-pei45/seekdb/compare/08c76418a8e1fef3c1aae83010658ff56a4faa57...9d0b421fb6",
+  "permalink_url": "https://github.com/pei-pei45/seekdb/compare/pei-pei45:08c7641...pei-pei45:9d0b421",
+  "diff_url": "https://github.com/pei-pei45/seekdb/compare/08c76418a8e1fef3c1aae83010658ff56a4faa57...9d0b421fb6.diff",
+  "patch_url": "https://github.com/pei-pei45/seekdb/compare/08c76418a8e1fef3c1aae83010658ff56a4faa57...9d0b421fb6.patch",
+  "base_commit": {
+    "sha": "08c76418a8e1fef3c1aae83010658ff56a4faa57",
+    "node_id": "C_kwDOVZvLXNoAKDA4Yzc2NDE4YThlMWZlZjNjMWFhZTgzMDEwNjU4ZmY1NmE0ZmFhNTc",
+    "commit": {
+      "author": {
+        "name": "zihaomu",
+        "email": "zmu@amd.com",
+        "date": "2026-10-26T10:25:07Z"
+      },
+      "committer": {
+        "name": "zihaomu",
+        "email": "zmu@amd.com",
+        "date": "2026-10-26T10:25:07Z"
+      },
+      "message": "build(contest): freeze reproducible CMake baseline\n\nTrack the validated Rust dependency lock and require locked Cargo resolution for the AMD CAGRA contest baseline.\n\nCo-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>",
+      "tree": {
+        "sha": "836ef72d3b0839660e26a1674c2ba2d1ab8cb5f9",
+        "url": "https://api.github.com/repos/pei-pei45/seekdb/git/trees/836ef72d3b0839660e26a1674c2ba2d1ab8cb5f9"
+      },
+      "url": "https://api.github.com/repos/pei-pei45/seekdb/git/commits/08c76418a8e1fef3c1aae83010658ff56a4faa57",
+      "comment_count": 0,
+      "verification": {
+        "verified": false,
+        "reason": "unsigned",
+        "signature": null,
+        "payload": null,
+        "verified_at": null
+      }
+    },
+    "url": "https://api.github.com/repos/pei-pei45/seekdb/commits/08c76418a8e1fef3c1aae83010658ff56a4faa57",
+    "html_url": "https://github.com/pei-pei45/seekdb/commit/08c76418a8e1fef3c1aae83010658ff56a4faa57",
+    "comments_url": "https://api.github.com/repos/pei-pei45/seekdb/commits/08c76418a8e1fef3c1aae83010658ff56a4faa57/comments",
+    "author": {
+      "login": "zihaomu",
+      "id": 16487352,
+      "node_id": "MDQ6VXNlcjE2NDg3MzUy",
+      "avatar_url": "https://avatars.githubusercontent.com/u/16487352?v=4",
+      "gravatar_id": "",
+      "url": "https://api.github.com/users/zihaomu",
+      "html_url": "https://github.com/zihaomu",
+      "followers_url": "https://api.github.com/users/zihaomu/followers",
+      "following_url": "https://api.github.com/users/zihaomu/following{/other_user}",
+      "gists_url": "https://api.github.com/users/zihaomu/gists{/gist_id}",
+      "starred_url": "https://api.github.com/users/zihaomu/starred{/owner}{/repo}",
+      "subscriptions_url": "https://api.github.com/users/zihaomu/subscriptions",
+      "organizations_url": "https://api.github.com/users/zihaomu/orgs",
+      "repos_url": "https://api.github.com/users/zihaomu/repos",
+      "events_url": "https://api.github.com/users/zihaomu/events{/privacy}",
+      "received_events_url": "https://api.github.com/users/zihaomu/received_events",
+      "type": "User",
+      "user_view_type": "public",
+      "site_admin": false
+    },
+    "committer": {
+      "login": "zihaomu",
+      "id": 16487352,
+      "node_id": "MDQ6VXNlcjE2NDg3MzUy",
+      "avatar_url": "https://avatars.githubusercontent.com/u/16487352?v=4",
+      "gravatar_id": "",
+      "url": "https://api.github.com/users/zihaomu",
+      "html_url": "https://github.com/zihaomu",
+      "followers_url": "https://api.github.com/users/zihaomu/followers",
+      "following_url": "https://api.github.com/users/zihaomu/following{/other_user}",
+      "gists_url": "https://api.github.com/users/zihaomu/gists{/gist_id}",
+      "starred_url": "https://api.github.com/users/zihaomu/starred{/owner}{/repo}",
+      "subscriptions_url": "https://api.github.com/users/zihaomu/subscriptions",
+      "organizations_url": "https://api.github.com/users/zihaomu/orgs",
+      "repos_url": "https://api.github.com/users/zihaomu/repos",
+      "events_url": "https://api.github.com/users/zihaomu/events{/privacy}",
+      "received_events_url": "https://api.github.com/users/zihaomu/received_events",
+      "type": "User",
+      "user_view_type": "public",
+      "site_admin": false
+    },
+    "parents": [
+      {
+        "sha": "de17949d57b9cd2240f141f8116d29bcd495d8d9",
+        "url": "https://api.github.com/repos/pei-pei45/seekdb/commits/de17949d57b9cd2240f141f8116d29bcd495d8d9",
+        "html_url": "https://github.com/pei-pei45/seekdb/commit/de17949d57b9cd2240f141f8116d29bcd495d8d9"
+      }
+    ]
+  },
+  "merge_base_commit": {
+    "sha": "08c76418a8e1fef3c1aae83010658ff56a4faa57",
+    "node_id": "C_kwDOVZvLXNoAKDA4Yzc2NDE4YThlMWZlZjNjMWFhZTgzMDEwNjU4ZmY1NmE0ZmFhNTc",
+    "commit": {
+      "author": {
+        "name": "zihaomu",
+        "email": "zmu@amd.com",
+        "date": "2026-10-26T10:25:07Z"
+      },
+      "committer": {
+        "name": "zihaomu",
+        "email": "zmu@amd.com",
+        "date": "2026-10-26T10:25:07Z"
+      },
+      "message": "build(contest): freeze reproducible CMake baseline\n\nTrack the validated Rust dependency lock and require locked Cargo resolution for the AMD CAGRA contest baseline.\n\nCo-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>",
+      "tree": {
+        "sha": "836ef72d3b0839660e26a1674c2ba2d1ab8cb5f9",
+        "url": "https://api.github.com/repos/pei-pei45/seekdb/git/trees/836ef72d3b0839660e26a1674c2ba2d1ab8cb5f9"
+      },
+      "url": "https://api.github.com/repos/pei-pei45/seekdb/git/commits/08c76418a8e1fef3c1aae83010658ff56a4faa57",
+      "comment_count": 0,
+      "verification": {
+        "verified": false,
+        "reason": "unsigned",
+        "signature": null,
+        "payload": null,
+        "verified_at": null
+      }
+    },
+    "url": "https://api.github.com/repos/pei-pei45/seekdb/commits/08c76418a8e1fef3c1aae83010658ff56a4faa57",
+    "html_url": "https://github.com/pei-pei45/seekdb/commit/08c76418a8e1fef3c1aae83010658ff56a4faa57",
+    "comments_url": "https://api.github.com/repos/pei-pei45/seekdb/commits/08c76418a8e1fef3c1aae83010658ff56a4faa57/comments",
+    "author": {
+      "login": "zihaomu",
+      "id": 16487352,
+      "node_id": "MDQ6VXNlcjE2NDg3MzUy",
+      "avatar_url": "https://avatars.githubusercontent.com/u/16487352?v=4",
+      "gravatar_id": "",
+      "url": "https://api.github.com/users/zihaomu",
+      "html_url": "https://github.com/zihaomu",
+      "followers_url": "https://api.github.com/users/zihaomu/followers",
+      "following_url": "https://api.github.com/users/zihaomu/following{/other_user}",
+      "gists_url": "https://api.github.com/users/zihaomu/gists{/gist_id}",
+      "starred_url": "https://api.github.com/users/zihaomu/starred{/owner}{/repo}",
+      "subscriptions_url": "https://api.github.com/users/zihaomu/subscriptions",
+      "organizations_url": "https://api.github.com/users/zihaomu/orgs",
+      "repos_url": "https://api.github.com/users/zihaomu/repos",
+      "events_url": "https://api.github.com/users/zihaomu/events{/privacy}",
+      "received_events_url": "https://api.github.com/users/zihaomu/received_events",
+      "type": "User",
+      "user_view_type": "public",
+      "site_admin": false
+    },
+    "committer": {
+      "login": "zihaomu",
+      "id": 16487352,
+      "node_id": "MDQ6VXNlcjE2NDg3MzUy",
+      "avatar_url": "https://avatars.githubusercontent.com/u/16487352?v=4",
+      "gravatar_id": "",
+      "url": "https://api.github.com/users/zihaomu",
+      "html_url": "https://github.com/zihaomu",
+      "followers_url": "https://api.github.com/users/zihaomu/followers",
+      "following_url": "https://api.github.com/users/zihaomu/following{/other_user}",
+      "gists_url": "https://api.github.com/users/zihaomu/gists{/gist_id}",
+      "starred_url": "https://api.github.com/users/zihaomu/starred{/owner}{/repo}",
+      "subscriptions_url": "https://api.github.com/users/zihaomu/subscriptions",
+      "organizations_url": "https://api.github.com/users/zihaomu/orgs",
+      "repos_url": "https://api.github.com/users/zihaomu/repos",
+      "events_url": "https://api.github.com/users/zihaomu/events{/privacy}",
+      "received_events_url": "https://api.github.com/users/zihaomu/received_events",
+      "type": "User",
+      "user_view_type": "public",
+      "site_admin": false
+    },
+    "parents": [
+      {
+        "sha": "de17949d57b9cd2240f141f8116d29bcd495d8d9",
+        "url": "https://api.github.com/repos/pei-pei45/seekdb/commits/de17949d57b9cd2240f141f8116d29bcd495d8d9",
+        "html_url": "https://github.com/pei-pei45/seekdb/commit/de17949d57b9cd2240f141f8116d29bcd495d8d9"
+      }
+    ]
+  },
+  "status": "ahead",
+  "ahead_by": 2,
+  "behind_by": 0,
+  "total_commits": 2,
+  "commits": [
+    {
+      "sha": "a5243f6e8ed6d64c91fd568b87eb980e940e928d",
+      "node_id": "C_kwDOVZvLXNoAKGE1MjQzZjZlOGVkNmQ2NGM5MWZkNTY4Yjg3ZWI5ODBlOTQwZTkyOGQ",
+      "commit": {
+        "author": {
+          "name": "pei-pei45",
+          "email": "208655030+pei-pei45@users.noreply.github.com",
+          "date": "2026-10-27T21:00:38Z"
+        },
+        "committer": {
+          "name": "pei-pei45",
+          "email": "208655030+pei-pei45@users.noreply.github.com",
+          "date": "2026-10-27T21:00:38Z"
+        },
+        "message": "fix(bridge): size CAGRA itopk by the requested top-k\n\ncuvsCagraSearchParams.itopk_size defaults to 64, so a query with limit k\nabove 64 was silently capped (the CPU fallback hid it on the baseline).\nRaise it to topk before searching, so limit 70..200 returns k rows.",
+        "tree": {
+          "sha": "b0bf7d02d91fd38eb55ba677884833a83f1ad1a0",
+          "url": "https://api.github.com/repos/pei-pei45/seekdb/git/trees/b0bf7d02d91fd38eb55ba677884833a83f1ad1a0"
+        },
+        "url": "https://api.github.com/repos/pei-pei45/seekdb/git/commits/a5243f6e8ed6d64c91fd568b87eb980e940e928d",
+        "comment_count": 0,
+        "verification": {
+          "verified": false,
+          "reason": "unsigned",
+          "signature": null,
+          "payload": null,
+          "verified_at": null
+        }
+      },
+      "url": "https://api.github.com/repos/pei-pei45/seekdb/commits/a5243f6e8ed6d64c91fd568b87eb980e940e928d",
+      "html_url": "https://github.com/pei-pei45/seekdb/commit/a5243f6e8ed6d64c91fd568b87eb980e940e928d",
+      "comments_url": "https://api.github.com/repos/pei-pei45/seekdb/commits/a5243f6e8ed6d64c91fd568b87eb980e940e928d/comments",
+      "author": {
+        "login": "pei-pei45",
+        "id": 208655030,
+        "node_id": "U_kgDODG_Stg",
+        "avatar_url": "https://avatars.githubusercontent.com/u/208655030?v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/pei-pei45",
+        "html_url": "https://github.com/pei-pei45",
+        "followers_url": "https://api.github.com/users/pei-pei45/followers",
+        "following_url": "https://api.github.com/users/pei-pei45/following{/other_user}",
+        "gists_url": "https://api.github.com/users/pei-pei45/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/pei-pei45/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/pei-pei45/subscriptions",
+        "organizations_url": "https://api.github.com/users/pei-pei45/orgs",
+        "repos_url": "https://api.github.com/users/pei-pei45/repos",
+        "events_url": "https://api.github.com/users/pei-pei45/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/pei-pei45/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "committer": {
+        "login": "pei-pei45",
+        "id": 208655030,
+        "node_id": "U_kgDODG_Stg",
+        "avatar_url": "https://avatars.githubusercontent.com/u/208655030?v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/pei-pei45",
+        "html_url": "https://github.com/pei-pei45",
+        "followers_url": "https://api.github.com/users/pei-pei45/followers",
+        "following_url": "https://api.github.com/users/pei-pei45/following{/other_user}",
+        "gists_url": "https://api.github.com/users/pei-pei45/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/pei-pei45/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/pei-pei45/subscriptions",
+        "organizations_url": "https://api.github.com/users/pei-pei45/orgs",
+        "repos_url": "https://api.github.com/users/pei-pei45/repos",
+        "events_url": "https://api.github.com/users/pei-pei45/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/pei-pei45/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "parents": [
+        {
+          "sha": "08c76418a8e1fef3c1aae83010658ff56a4faa57",
+          "url": "https://api.github.com/repos/pei-pei45/seekdb/commits/08c76418a8e1fef3c1aae83010658ff56a4faa57",
+          "html_url": "https://github.com/pei-pei45/seekdb/commit/08c76418a8e1fef3c1aae83010658ff56a4faa57"
+        }
+      ]
+    },
+    {
+      "sha": "9d0b421fb6851da395e7192b109be6b75af323b9",
+      "node_id": "C_kwDOVZvLXNoAKDlkMGI0MjFmYjY4NTFkYTM5NWU3MTkyYjEwOWJlNmI3NWFmMzIzYjk",
+      "commit": {
+        "author": {
+          "name": "pei-pei45",
+          "email": "208655030+pei-pei45@users.noreply.github.com",
+          "date": "2026-10-27T21:00:38Z"
+        },
+        "committer": {
+          "name": "pei-pei45",
+          "email": "208655030+pei-pei45@users.noreply.github.com",
+          "date": "2026-10-27T21:00:38Z"
+        },
+        "message": "feat(vector): defer the VSAG CPU graph while cuVS CAGRA is active\n\nWhen an index is created with lib=cuvs, inserts currently feed both the\ncuVS GPU graph and the VSAG CPU graph. The CPU graph is ~93% of the build\ntime, so paying for it doubles the CAGRA build window.\n\nThis adds OB_CUVS_DEFER_VSAG=1 (default: off, baseline behaviour):\n - add_index only buffers rows (vector + vid) instead of inserting into\n   VSAG; the GPU graph is built from the same buffer on first search;\n - a buffered row is deduplicated by vid (the delta index and the snapshot\n   both call add_index for the same row);\n - ob_cuvs_materialize() replays the buffer into VSAG on demand when the\n   GPU cannot answer a request, then stops deferring so later inserts keep\n   both graphs consistent.\n\nThe dense entry keeps GPU first; the iterating entry materialises up front\nbecause it serves candidates batch by batch and one-shot GPU top-k cannot.\nFiltered-query semantics are unchanged with the flag off.",
+        "tree": {
+          "sha": "b6f8325c9eb7e7a0c5dde0a0f7fc383d03c6a09f",
+          "url": "https://api.github.com/repos/pei-pei45/seekdb/git/trees/b6f8325c9eb7e7a0c5dde0a0f7fc383d03c6a09f"
+        },
+        "url": "https://api.github.com/repos/pei-pei45/seekdb/git/commits/9d0b421fb6851da395e7192b109be6b75af323b9",
+        "comment_count": 0,
+        "verification": {
+          "verified": false,
+          "reason": "unsigned",
+          "signature": null,
+          "payload": null,
+          "verified_at": null
+        }
+      },
+      "url": "https://api.github.com/repos/pei-pei45/seekdb/commits/9d0b421fb6851da395e7192b109be6b75af323b9",
+      "html_url": "https://github.com/pei-pei45/seekdb/commit/9d0b421fb6851da395e7192b109be6b75af323b9",
+      "comments_url": "https://api.github.com/repos/pei-pei45/seekdb/commits/9d0b421fb6851da395e7192b109be6b75af323b9/comments",
+      "author": {
+        "login": "pei-pei45",
+        "id": 208655030,
+        "node_id": "U_kgDODG_Stg",
+        "avatar_url": "https://avatars.githubusercontent.com/u/208655030?v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/pei-pei45",
+        "html_url": "https://github.com/pei-pei45",
+        "followers_url": "https://api.github.com/users/pei-pei45/followers",
+        "following_url": "https://api.github.com/users/pei-pei45/following{/other_user}",
+        "gists_url": "https://api.github.com/users/pei-pei45/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/pei-pei45/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/pei-pei45/subscriptions",
+        "organizations_url": "https://api.github.com/users/pei-pei45/orgs",
+        "repos_url": "https://api.github.com/users/pei-pei45/repos",
+        "events_url": "https://api.github.com/users/pei-pei45/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/pei-pei45/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "committer": {
+        "login": "pei-pei45",
+        "id": 208655030,
+        "node_id": "U_kgDODG_Stg",
+        "avatar_url": "https://avatars.githubusercontent.com/u/208655030?v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/pei-pei45",
+        "html_url": "https://github.com/pei-pei45",
+        "followers_url": "https://api.github.com/users/pei-pei45/followers",
+        "following_url": "https://api.github.com/users/pei-pei45/following{/other_user}",
+        "gists_url": "https://api.github.com/users/pei-pei45/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/pei-pei45/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/pei-pei45/subscriptions",
+        "organizations_url": "https://api.github.com/users/pei-pei45/orgs",
+        "repos_url": "https://api.github.com/users/pei-pei45/repos",
+        "events_url": "https://api.github.com/users/pei-pei45/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/pei-pei45/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "parents": [
+        {
+          "sha": "a5243f6e8ed6d64c91fd568b87eb980e940e928d",
+          "url": "https://api.github.com/repos/pei-pei45/seekdb/commits/a5243f6e8ed6d64c91fd568b87eb980e940e928d",
+          "html_url": "https://github.com/pei-pei45/seekdb/commit/a5243f6e8ed6d64c91fd568b87eb980e940e928d"
+        }
+      ]
+    }
+  ],
+  "files": [
+    {
+      "sha": "50a4230c9a9496854821293f5a6257ab99f6b3f4",
+      "filename": "src/oblib/lib/vector/ob_vsag_adaptor.cpp",
+      "status": "modified",
+      "additions": 164,
+      "deletions": 14,
+      "changes": 178,
+      "blob_url": "https://github.com/pei-pei45/seekdb/blob/9d0b421fb6851da395e7192b109be6b75af323b9/src%2Foblib%2Flib%2Fvector%2Fob_vsag_adaptor.cpp",
+      "raw_url": "https://github.com/pei-pei45/seekdb/raw/9d0b421fb6851da395e7192b109be6b75af323b9/src%2Foblib%2Flib%2Fvector%2Fob_vsag_adaptor.cpp",
+      "contents_url": "https://api.github.com/repos/pei-pei45/seekdb/contents/src%2Foblib%2Flib%2Fvector%2Fob_vsag_adaptor.cpp?ref=9d0b421fb6851da395e7192b109be6b75af323b9",
+      "patch": "@@ -56,6 +56,11 @@ static int   seekdb_cuvs_search(void *, const float *, long, long, unsigned int\n static void  seekdb_cuvs_free(void *) {}\n #endif\n \n+#include <unordered_map>\n+\n+#include <queue>\n+#include <utility>\n+\n namespace oceanbase {\n namespace common {\n namespace obvsag {\n@@ -74,7 +79,13 @@ struct ObCuvsEntry {\n   std::vector<int64_t> ids_;    // CAGRA row offset -> external vid (of the built index)\n   std::vector<float> buf_vecs_; // accumulated vectors (row-major) from add_index\n   std::vector<int64_t> buf_ids_;// accumulated external vids from add_index\n+  // vid -> row slot in buf_vecs_. add_index() is invoked for both the delta and\n+  // the snapshot graph, so without this the same row is buffered twice and CAGRA\n+  // returns duplicate neighbours.\n+  std::unordered_map<int64_t, size_t> id2slot_;\n   size_t built_n_ = 0;          // #vectors present when cuVS was last (re)built\n+  bool vsag_deferred_ = false;  // CPU graph intentionally not built on insert\n+  bool vsag_materialized_ = false;  // ... and now built on demand\n };\n static std::mutex g_ob_cuvs_mu;\n static std::map<void *, ObCuvsEntry *> g_ob_cuvs_reg;\n@@ -89,6 +100,33 @@ static inline bool ob_cuvs_enabled() {\n #endif\n }\n // Per-index opt-in: the plugin marks a handle when its index was declared lib=cuvs.\n+// Experiment gate: buffer lib=cuvs rows on the GPU side only and defer the CPU\n+// HNSW graph (see patch_cagra.py). Off unless OB_CUVS_DEFER_VSAG=1, so the\n+// stock behaviour stays one env var away.\n+static inline bool ob_cuvs_defer_vsag() {\n+#ifdef OB_BUILD_CUVS\n+  static const bool on = []() {\n+    const char *env = ::getenv(\"OB_CUVS_DEFER_VSAG\");\n+    return env != nullptr && env[0] == '1';\n+  }();\n+  return on;\n+#else\n+  return false;\n+#endif\n+}\n+// True when this index should keep deferring the CPU graph. Once the graph has\n+// been materialised we stop deferring so later inserts keep it consistent.\n+// Defined here (not with the fallback code) because it only touches the\n+// registry, while the caller add_index() is far above the search entry points.\n+static bool ob_cuvs_take_defer(void *key)\n+{\n+  std::lock_guard<std::mutex> guard(g_ob_cuvs_mu);\n+  auto it = g_ob_cuvs_reg.find(key);\n+  if (it == g_ob_cuvs_reg.end() || it->second == nullptr) { return false; }\n+  if (it->second->vsag_materialized_) { return false; }\n+  it->second->vsag_deferred_ = true;\n+  return true;\n+}\n static inline bool ob_cuvs_marked(void *key) {\n #ifdef OB_BUILD_CUVS\n   std::lock_guard<std::mutex> guard(g_ob_cuvs_marked_mu);\n@@ -139,9 +177,21 @@ static void ob_cuvs_add(void *key, const float *vectors, const int64_t *ids,\n   if (slot == nullptr) { slot = new ObCuvsEntry(); slot->dim_ = dim; }\n   if (slot->dim_ == 0) { slot->dim_ = dim; }\n   if (slot->dim_ != dim) { return; }\n-  slot->buf_vecs_.insert(slot->buf_vecs_.end(), vectors,\n-                         vectors + static_cast<size_t>(dim) * size);\n-  slot->buf_ids_.insert(slot->buf_ids_.end(), ids, ids + size);\n+  const size_t d = static_cast<size_t>(dim);\n+  for (int i = 0; i < size; ++i) {\n+    const int64_t vid = ids[i];\n+    auto it = slot->id2slot_.find(vid);\n+    if (it != slot->id2slot_.end()) {\n+      // same vid again: refresh in place (delta/snapshot duplicate, or an update)\n+      ::memcpy(slot->buf_vecs_.data() + it->second * d, vectors + static_cast<size_t>(i) * d,\n+               sizeof(float) * d);\n+    } else {\n+      slot->id2slot_.emplace(vid, slot->buf_ids_.size());\n+      slot->buf_ids_.push_back(vid);\n+      slot->buf_vecs_.insert(slot->buf_vecs_.end(), vectors + static_cast<size_t>(i) * d,\n+                             vectors + static_cast<size_t>(i + 1) * d);\n+    }\n+  }\n }\n static void ob_cuvs_erase(void *key) {\n   { std::lock_guard<std::mutex> mg(g_ob_cuvs_marked_mu); g_ob_cuvs_marked.erase(key); }\n@@ -162,6 +212,8 @@ struct ObCuvsJob {\n static void *ob_cuvs_job(void *arg) {\n   ObCuvsJob *j = static_cast<ObCuvsJob *>(arg);\n   if (j->need_build) {\n+    LOG_INFO(\"[OBVSAG][cuVS] CAGRA build\", \"n\", static_cast<long>(j->n),\n+             \"dim\", j->dim, \"unique_vids\", static_cast<long>(j->ent->buf_ids_.size()));\n     void *nb = seekdb_cuvs_build(j->ent->buf_vecs_.data(), static_cast<long>(j->n),\n                                  static_cast<long>(j->dim));\n     if (nb != nullptr) {\n@@ -256,10 +308,19 @@ static bool ob_cuvs_try_search(void *key, vsag::Allocator *alloc,\n   // excluded, fall back to VSAG (the true filtered top-k may rank beyond k here).\n   if (filter != nullptr) {\n     FilterInterface *fi = static_cast<FilterInterface *>(filter);\n+    bool all_valid = true;\n     for (int64_t i = 0; i < topk; ++i) {\n       int64_t vid = (off[i] < ent->ids_.size()) ? static_cast<int64_t>(ent->ids_[off[i]]) : -1;\n       const bool valid = reverse_filter ? fi->test(vid) : !fi->test(vid);\n-      if (!valid) { return false; }\n+      if (!valid) { all_valid = false; break; }\n+    }\n+    if (!all_valid) {\n+      // The unfiltered top-k contains rows this query must not see. Filter\n+      // evaluation itself needs CPU-side index state (ObHnswBitmapFilter::test\n+      // resolves SIMPLE_RANGE predicates through the adaptor), so the only\n+      // correct answer is to decline here and let the caller materialise the\n+      // deferred CPU graph and re-run the query on it.\n+      return false;\n     }\n   }\n   int64_t *out_ids = static_cast<int64_t *>(\n@@ -502,6 +563,61 @@ int HnswIndexHandler::add_index(const vsag::DatasetPtr &incremental)\n   return ret;\n }\n \n+// A deferred index (see ob_cuvs_take_defer) has no CPU graph, which is fine while\n+// cuVS answers the query. The moment cuVS is not allowed to -- a restricted\n+// pre-filter, or a stale GPU build -- the VSAG fallback below would search an\n+// empty index and the caller would see zero rows. Every row is still in\n+// buf_vecs_/buf_ids_, so rebuild the CPU graph from that buffer here: one bulk\n+// Add, once per index. Afterwards vsag_materialized_ stops the deferral so later\n+// inserts keep both graphs consistent.\n+static std::mutex g_ob_cuvs_mat_mu;\n+static int ob_cuvs_materialize(void *key, HnswIndexHandler *hnsw)\n+{\n+  int ret = OB_SUCCESS;\n+  std::vector<float> vecs;\n+  std::vector<int64_t> ids;\n+  int64_t dim = 0;\n+  {\n+    // Serialise materialisation: two queries may need the graph at the same time.\n+    std::lock_guard<std::mutex> build_guard(g_ob_cuvs_mat_mu);\n+    {\n+      std::lock_guard<std::mutex> guard(g_ob_cuvs_mu);\n+      std::map<void *, ObCuvsEntry *>::iterator it = g_ob_cuvs_reg.find(key);\n+      if (it == g_ob_cuvs_reg.end() || it->second == nullptr) {\n+        return OB_SUCCESS;\n+      }\n+      ObCuvsEntry *ent = it->second;\n+      if (!ent->vsag_deferred_ || ent->vsag_materialized_ || ent->buf_ids_.empty()) {\n+        return OB_SUCCESS;\n+      }\n+      ent->vsag_materialized_ = true;\n+      dim = ent->dim_;\n+      vecs = ent->buf_vecs_;\n+      ids = ent->buf_ids_;\n+    }\n+    const int64_t CHUNK = 4096;\n+    const int64_t total = static_cast<int64_t>(ids.size());\n+    for (int64_t off = 0; OB_SUCC(ret) && off < total; off += CHUNK) {\n+      const int64_t n = (off + CHUNK <= total) ? CHUNK : (total - off);\n+      vsag::DatasetPtr dataset = vsag::Dataset::Make();\n+      dataset->Dim(dim)\n+          ->NumElements(n)\n+          ->Ids(ids.data() + off)\n+          ->Float32Vectors(vecs.data() + off * dim)\n+          ->Owner(false);\n+      if (OB_FAIL(hnsw->add_index(dataset))) {\n+        LOG_WARN(\"[OBVSAG][cuVS] materialise chunk failed\", K(ret), K(off), K(n));\n+      }\n+    }\n+    if (OB_SUCC(ret)) {\n+      LOG_INFO(\"[OBVSAG][cuVS] materialised deferred CPU graph\", K(total), K(dim),\n+               \"index_number\", hnsw->get_index_number());\n+    }\n+  }\n+  return ret;\n+}\n+\n+\n int HnswIndexHandler::cal_distance_by_id(uint32_t len, uint32_t *dims, float *vals,\n                                          const int64_t *ids, int64_t count,\n                                          const float *&dist)\n@@ -1293,9 +1409,16 @@ int add_index(VectorIndexPtr &index_handler, float *vector,\n {\n   int ret = OB_SUCCESS;\n   ob_vsag_trace(\"add_dense\", (const void*)index_handler, (long)(dim), (long)(size));\n-  if (ob_cuvs_marked(index_handler) && index_handler != nullptr &&\n-      strcmp(static_cast<HnswIndexHandler *>(index_handler)->get_metric(), \"l2\") == 0) {\n+  const bool cuvs_route = (ob_cuvs_marked(index_handler) && index_handler != nullptr &&\n+      strcmp(static_cast<HnswIndexHandler *>(index_handler)->get_metric(), \"l2\") == 0);\n+  if (cuvs_route) {\n     ob_cuvs_add(index_handler, vector, ids, dim, size);\n+    if (ob_cuvs_defer_vsag() && ob_cuvs_take_defer(index_handler)) {\n+      // The GPU buffer above is what serves queries for this index; skip the\n+      // incremental CPU insert so the build is not paid twice.\n+      ob_vsag_trace(\"cuvs_defer_add\", (const void *)index_handler, (long)dim, (long)size);\n+      return OB_SUCCESS;\n+    }\n   }\n   if (index_handler == nullptr || vector == nullptr || ids == nullptr) {\n     ret = OB_INVALID_ARGUMENT;\n@@ -1382,6 +1505,17 @@ int get_index_number(VectorIndexPtr &index_handler, int64_t &size)\n   } else {\n     HnswIndexHandler *hnsw = static_cast<HnswIndexHandler *>(index_handler);\n     size = hnsw->get_index_number();\n+    // A deferred CPU graph would report 0 even though the GPU index is built and\n+    // serving, which makes row-count gates skip the index entirely. The buffer is\n+    // the authoritative row count for this index.\n+    if (ob_cuvs_marked(index_handler)) {\n+      std::lock_guard<std::mutex> guard(g_ob_cuvs_mu);\n+      auto it = g_ob_cuvs_reg.find(index_handler);\n+      if (it != g_ob_cuvs_reg.end() && it->second != nullptr &&\n+          it->second->vsag_deferred_ && !it->second->buf_ids_.empty()) {\n+        size = static_cast<int64_t>(it->second->buf_ids_.size());\n+      }\n+    }\n   }\n   return ret;\n }\n@@ -1454,10 +1588,20 @@ int knn_search(VectorIndexPtr &index_handler, float *query_vector,\n   } else {\n     if (ob_cuvs_marked(index_handler)) {\n       HnswIndexHandler *cuvs_hnsw = static_cast<HnswIndexHandler *>(index_handler);\n-      if (strcmp(cuvs_hnsw->get_metric(), \"l2\") == 0 &&\n-          ob_cuvs_try_search(index_handler, cuvs_hnsw->get_allocator(),\n-                             query_vector, dim, topk, dist, ids, result_size, invalid, reverse_filter)) {\n-        return OB_SUCCESS;\n+      if (strcmp(cuvs_hnsw->get_metric(), \"l2\") == 0) {\n+        // Single-shot query: cuVS answers it whenever it can. It declines for a\n+        // restricted pre-filter (a row predicate it cannot evaluate) or a stale\n+        // GPU build; a deferred index then has no CPU graph to fall back to, so\n+        // materialise it first and let VSAG answer instead.\n+        if (ob_cuvs_try_search(index_handler, cuvs_hnsw->get_allocator(),\n+                               query_vector, dim, topk, dist, ids, result_size,\n+                               invalid, reverse_filter)) {\n+          return OB_SUCCESS;\n+        }\n+        if (OB_FAIL(ob_cuvs_materialize(index_handler, cuvs_hnsw))) {\n+          LOG_WARN(\"[OBVSAG][cuVS] failed to materialise deferred CPU graph\", K(ret));\n+          ret = OB_SUCCESS;\n+        }\n       }\n     }\n     FilterInterface *bitmap = static_cast<FilterInterface *>(invalid);\n@@ -1503,10 +1647,16 @@ int knn_search(VectorIndexPtr &index_handler, float *query_vector,\n   } else {\n     if (ob_cuvs_marked(index_handler)) {\n       HnswIndexHandler *cuvs_hnsw = static_cast<HnswIndexHandler *>(index_handler);\n-      if (strcmp(cuvs_hnsw->get_metric(), \"l2\") == 0 &&\n-          ob_cuvs_try_search(index_handler, cuvs_hnsw->get_allocator(),\n-                             query_vector, dim, topk, dist, ids, result_size, invalid, reverse_filter)) {\n-        return OB_SUCCESS;\n+      if (strcmp(cuvs_hnsw->get_metric(), \"l2\") == 0) {\n+        // Iterative scan: the executor pulls candidates in batches and applies the\n+        // row predicate itself, so it needs an index it can walk deeper into. A\n+        // one-shot GPU top-k cannot do that (it would return the same k rows on\n+        // every call, and all of them may be filtered away). Materialise the CPU\n+        // graph once and let VSAG iterate, like the frozen baseline.\n+        if (OB_FAIL(ob_cuvs_materialize(index_handler, cuvs_hnsw))) {\n+          LOG_WARN(\"[OBVSAG][cuVS] failed to materialise deferred CPU graph\", K(ret));\n+          ret = OB_SUCCESS;\n+        }\n       }\n     }\n     FilterInterface *bitmap = static_cast<FilterInterface *>(invalid);"
+    },
+    {
+      "sha": "cc0a359e3b9f9f8f84269850da774f84f4144145",
+      "filename": "tools/hipvs_bridge/seekdb_cuvs_bridge.c",
+      "status": "modified",
+      "additions": 4,
+      "deletions": 0,
+      "changes": 4,
+      "blob_url": "https://github.com/pei-pei45/seekdb/blob/9d0b421fb6851da395e7192b109be6b75af323b9/tools%2Fhipvs_bridge%2Fseekdb_cuvs_bridge.c",
+      "raw_url": "https://github.com/pei-pei45/seekdb/raw/9d0b421fb6851da395e7192b109be6b75af323b9/tools%2Fhipvs_bridge%2Fseekdb_cuvs_bridge.c",
+      "contents_url": "https://api.github.com/repos/pei-pei45/seekdb/contents/tools%2Fhipvs_bridge%2Fseekdb_cuvs_bridge.c?ref=9d0b421fb6851da395e7192b109be6b75af323b9",
+      "patch": "@@ -10,6 +10,7 @@\n #endif\n #include <stdio.h>\n #include <stdlib.h>\n+#include <string.h>\n \n typedef struct {\n   cuvsResources_t        res;\n@@ -63,6 +64,9 @@ int seekdb_cuvs_search(void* handle, const float* query, long nq, long topk,\n     nt=qt; nt.dl_tensor.data=nd; nt.dl_tensor.dtype.code=kDLUInt; nt.dl_tensor.shape=nsh;\n     dt=qt; dt.dl_tensor.data=dd; dt.dl_tensor.dtype.code=kDLFloat; dt.dl_tensor.shape=dsh;\n     if (cuvsCagraSearchParamsCreate(&sp) != CUVS_SUCCESS) { rc=14; goto done; }\n+    /* itopk_size bounds how many neighbours the search can return; its default\n+     * (64) silently caps `limit k` at 64. Raise it to the requested topk. */\n+    if (sp->itopk_size < (size_t)topk) { sp->itopk_size = (size_t)topk; }\n     cuvsFilter f; f.type=NO_FILTER; f.addr=(uintptr_t)0;\n     if (cuvsCagraSearch(h->res, sp, h->idx, &qt, &nt, &dt, f) != CUVS_SUCCESS) { rc=15; goto done; }\n     if (cudaMemcpy(out_ids, nd, sizeof(unsigned)*nq*topk, cudaMemcpyDefault) != cudaSuccess) { rc=16; goto done; }"
+    }
+  ]
+}

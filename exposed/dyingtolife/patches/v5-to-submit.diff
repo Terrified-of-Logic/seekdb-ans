@@ -1,0 +1,592 @@
+diff --git a/docs/gpu-vector-index-hipvs-cuvs/contest-optimization.md b/docs/gpu-vector-index-hipvs-cuvs/contest-optimization.md
+new file mode 100644
+index 000000000..edcfe9aae
+--- /dev/null
++++ b/docs/gpu-vector-index-hipvs-cuvs/contest-optimization.md
+@@ -0,0 +1,85 @@
++# Contest optimisation notes (AMD track)
++
++Branch `amd-cagra-submit` on top of tag `amd-cagra-contest-baseline-v5`
++(commit `634888d9b037153fa143d2c913ba4b25503e1d62`).  Two changes, each
++independently switchable, no change to the SQL surface, the FP32/L2 contract or
++the `lib=vsag` CPU path.
++
++## 1. Reuse per-index device scratch (`tools/hipvs_bridge/seekdb_cuvs_bridge.c`)
++
++The baseline allocated and freed three device buffers (`nq x dim` queries,
++`nq x topk` ids, `nq x topk` distances) around every `knn_search`.  That is three
++`cuvsRMMAlloc` + three `cuvsRMMFree` per query, i.e. fixed overhead on top of the
++GPU work for single-row queries.
++
++Change: each index keeps 8 scratch slots and reuses the largest buffers it has
++already allocated.  Slots are handed out under a per-index mutex, so concurrent
++clients keep running in parallel; if all slots are busy the search allocates a
++private scratch and still runs on the GPU (never serialises, never falls back).
++
++Also added (`OB_CUVS_LOG=0` silences it):
++
++```text
++[seekdb_cuvs] build n=... dim=... ms=...      # GPU build wall time
++[seekdb_cuvs] search nq=... topk=... ms=...   # GPU search wall time
++```
++
++These lines are what the benchmarking harness uses to attribute time to the GPU
++stage and to prove the CAGRA graph was really built on the GPU inside the timed
++window.
++
++Optional build knobs (defaults reproduce the v5 graph exactly):
++
++| variable | default | meaning |
++| --- | --- | --- |
++| `OB_CUVS_NN_ITER` | 100 (v5) | nn-descent iterations |
++| `OB_CUVS_GRAPH_DEGREE` | 128 (v5) | final CAGRA graph degree |
++| `OB_CUVS_INTERMEDIATE_DEGREE` | 256 (v5) | intermediate graph degree |
++
++## 2. Overlap the CAGRA build with the CPU load (`src/oblib/lib/vector/ob_vsag_adaptor.cpp`)
++
++In the baseline the graph is still built at the very end of the DDL, inside
++`ob_cuvs_serialize`, i.e. strictly after the CPU-bound VSAG construction has
++finished.  The GPU is idle for the whole load and its build time is pure added
++latency.
++
++Change: `ob_cuvs_add` now
++
++* reserves `buf_vecs_` / `buf_ids_` geometrically instead of relying on
++  `std::vector::insert` growth (the baseline reallocates and copies the whole
++  accumulated table O(log n) times), and
++* starts a watcher thread that builds the CAGRA graph as soon as the buffered
++  vectors stop growing (300 ms quiet, geometric growth) or when the loader is
++  quiet for 500 ms, using the same 32 MB-stack pthread the baseline uses.
++
++The build runs with `g_ob_cuvs_mu` held, so it can never observe a reallocated
++buffer; the entry is re-looked-up under that lock on every step, so dropping an
++index simply stops the watcher; and serving still requires
++`built_n_ == buf_ids_.size()`, so a stale graph is never used for results.  When
++`ob_cuvs_serialize` runs it finds a ready graph and skips the rebuild.
++
++Runtime switches (all safe defaults):
++
++| variable | default | meaning |
++| --- | --- | --- |
++| `OB_CUVS_EAGER` | `1` | `0` disables the watcher and the reservation, restoring baseline behaviour |
++| `OB_CUVS_SETTLE_MS` | `300` | quiet window for a geometric-growth build |
++| `OB_CUVS_FINAL_MS` | `500` | quiet window for the tail build |
++
++## Reproduction
++
++```bash
++# bridge
++tools/hipvs_bridge/build.sh /work/bridge/libseekdb_cuvs_bridge.so
++
++# seekdb (same flags for baseline and candidate)
++./build.sh release -DOB_BUILD_CUVS=ON -DOB_BUILD_CUVS_TRACE=ON \
++  -DCUVS_BRIDGE_LIB=/work/bridge/libseekdb_cuvs_bridge.so --make -j64
++
++# measurement: DDL + first query, 3 cache-cleared rounds per version, recall and
++# QPS against exact ground truth -- see the harness shipped with the submission
++```
++
++The contest scoring compares the end-to-end build window (CREATE VECTOR INDEX
++until the first ANN query returns) of this branch against the frozen baseline on
++the same machine, dataset and index parameters.
+diff --git a/src/oblib/lib/vector/ob_vsag_adaptor.cpp b/src/oblib/lib/vector/ob_vsag_adaptor.cpp
+index 82d9d74c9..eebc5facf 100644
+--- a/src/oblib/lib/vector/ob_vsag_adaptor.cpp
++++ b/src/oblib/lib/vector/ob_vsag_adaptor.cpp
+@@ -87,6 +87,9 @@ struct ObCuvsEntry {
+   std::vector<int64_t> buf_ids_;// accumulated external vids from add_index
+   size_t built_n_ = 0;          // #vectors present when cuVS was last (re)built
+   bool vsag_ready_ = false;     // CPU fallback is built only when it is needed
++  // ---- [contest] idle-triggered background CAGRA build (see ob_cuvs_watch_job) ----
++  int64_t last_add_ms_ = 0;     // monotonic ms of the last buffered insert
++  bool watch_inflight_ = false; // a watcher thread is already running for this key
+ };
+ static std::mutex g_ob_cuvs_mu;
+ static std::map<void *, ObCuvsEntry *> g_ob_cuvs_reg;
+@@ -168,6 +171,7 @@ static void ob_cuvs_register(void *key, const float *vectors, const int64_t *ids
+ // Buffer vectors arriving via add_index. Plain HNSW builds BOTH its delta and its
+ // snapshot incrementally via add_index (one row at a time), so this is where the
+ // real data flows -- unlike build_index which is only used by the HNSW_SQ bulk path.
++static void ob_cuvs_start_watcher(void *key);  // defined with the idle-build logic below
+ static void ob_cuvs_add(void *key, const float *vectors, const int64_t *ids,
+                         int dim, int size) {
+   if (vectors == nullptr || ids == nullptr || dim <= 0 || size <= 0) { return; }
+@@ -176,9 +180,27 @@ static void ob_cuvs_add(void *key, const float *vectors, const int64_t *ids,
+   if (slot == nullptr) { slot = new ObCuvsEntry(); slot->dim_ = dim; }
+   if (slot->dim_ == 0) { slot->dim_ = dim; }
+   if (slot->dim_ != dim) { return; }
+-  slot->buf_vecs_.insert(slot->buf_vecs_.end(), vectors,
+-                         vectors + static_cast<size_t>(dim) * size);
++  // Reserve geometrically: the baseline relies on vector::insert growth, which
++  // reallocates and copies the whole accumulated table O(log n) times.  For a
++  // 1M x 768 float32 index that is several GB of extra host memcpy traffic,
++  // all of it inside the timed build window (and inside g_ob_cuvs_mu).
++  const size_t add_vecs = static_cast<size_t>(dim) * static_cast<size_t>(size);
++  const size_t need_vecs = slot->buf_vecs_.size() + add_vecs;
++  if (slot->buf_vecs_.capacity() < need_vecs) {
++    size_t target = slot->buf_vecs_.capacity() * 2;
++    if (target < need_vecs) { target = need_vecs; }
++    slot->buf_vecs_.reserve(target);
++  }
++  const size_t need_ids = slot->buf_ids_.size() + static_cast<size_t>(size);
++  if (slot->buf_ids_.capacity() < need_ids) {
++    size_t target = slot->buf_ids_.capacity() * 2;
++    if (target < need_ids) { target = need_ids; }
++    slot->buf_ids_.reserve(target);
++  }
++  slot->buf_vecs_.insert(slot->buf_vecs_.end(), vectors, vectors + add_vecs);
+   slot->buf_ids_.insert(slot->buf_ids_.end(), ids, ids + size);
++  slot->last_add_ms_ = ObTimeUtility::current_time() / 1000;
++  ob_cuvs_start_watcher(key);
+ }
+ static bool ob_cuvs_vsag_ready(void *key) {
+   std::lock_guard<std::mutex> guard(g_ob_cuvs_mu);
+@@ -265,6 +287,127 @@ static void *ob_cuvs_raw_batch_job(void *arg) {
+ 
+ static const size_t OB_CUVS_MIN_PTS = 256;  // CAGRA needs a graph; below this -> VSAG
+ 
++// ==== [contest] idle-triggered background CAGRA build ======================
++// On this baseline the GPU graph is still built at the very end of the DDL (in
++// ob_cuvs_serialize), i.e. strictly after the CPU-bound VSAG construction has
++// finished, so the GPU stays idle for the whole load and its build time is pure
++// added latency.  The watcher below starts the CAGRA build as soon as the
++// buffered vectors stop growing for a short while (or on geometric growth),
++// while the loader is still inserting into VSAG.  The serialize step then finds
++// a ready graph and the first query does not pay for it either.
++//
++// Safety:
++//  * the build reads buf_vecs_ only with g_ob_cuvs_mu held, so it can never see
++//    a reallocated buffer, and concurrent searches never see a half-built graph;
++//  * the entry is re-looked-up under the lock on every step, so dropping an
++//    index simply stops the watcher (no dangling pointer, no use-after-free);
++//  * serving still requires built_n_ == buf_ids_.size() (baseline guard), so a
++//    stale graph is never used for results;
++//  * OB_CUVS_EAGER=0 disables everything here and restores baseline behaviour.
++static inline bool ob_cuvs_eager_enabled() {
++  static const bool enabled = []() {
++    const char *e = ::getenv("OB_CUVS_EAGER");
++    return !(e != nullptr && e[0] == '0');
++  }();
++  return enabled;
++}
++static inline int64_t ob_cuvs_env_ms(const char *name, int64_t def_val) {
++  const char *e = ::getenv(name);
++  if (e == nullptr || e[0] == '\0') { return def_val; }
++  const int64_t v = ::atoll(e);
++  return v > 0 ? v : def_val;
++}
++struct ObCuvsWatchArg {
++  void *key_;
++};
++static void *ob_cuvs_watch_job(void *arg) {
++  void *key = static_cast<ObCuvsWatchArg *>(arg)->key_;
++  ::free(arg);
++  const int64_t settle_ms = ob_cuvs_env_ms("OB_CUVS_SETTLE_MS", 300);
++  const int64_t final_ms = ob_cuvs_env_ms("OB_CUVS_FINAL_MS", 500);
++  while (true) {
++    ::usleep(50 * 1000);
++    bool build_now = false;
++    bool stop = false;
++    {
++      std::lock_guard<std::mutex> guard(g_ob_cuvs_mu);
++      auto it = g_ob_cuvs_reg.find(key);
++      if (it == g_ob_cuvs_reg.end()) {
++        stop = true;  // index dropped while watching
++      } else {
++        ObCuvsEntry *ent = it->second;
++        const size_t n = ent->buf_ids_.size();
++        const int64_t idle_ms =
++            ObTimeUtility::current_time() / 1000 - ent->last_add_ms_;
++        if (ent->dim_ > 0 && n >= OB_CUVS_MIN_PTS && n > ent->built_n_) {
++          // geometric growth is worth a speculative build while loading; the
++          // smaller tail is only built once the loader looks quiescent
++          const bool geometric = (ent->built_n_ == 0 || n >= ent->built_n_ * 2);
++          if (idle_ms >= (geometric ? settle_ms : final_ms)) { build_now = true; }
++        } else if (idle_ms > final_ms * 4) {
++          stop = true;  // graph current and loader quiet: nothing left to watch
++        }
++      }
++    }
++    if (build_now) {
++      std::lock_guard<std::mutex> guard(g_ob_cuvs_mu);
++      auto it = g_ob_cuvs_reg.find(key);
++      if (it == g_ob_cuvs_reg.end()) { break; }
++      ObCuvsEntry *ent = it->second;
++      const size_t n = ent->buf_ids_.size();
++      if (ent->dim_ > 0 && n >= OB_CUVS_MIN_PTS && n > ent->built_n_ &&
++          ent->buf_vecs_.size() == n * static_cast<size_t>(ent->dim_)) {
++        std::shared_ptr<void> nb = ob_cuvs_build_big_stack(
++            ent->buf_vecs_.data(), static_cast<long>(n), ent->dim_);
++        if (nb != nullptr) {
++          ent->bridge_ = nb;
++          ent->built_n_ = n;
++          ent->ids_ = ent->buf_ids_;
++          ob_vsag_trace("cuvs_async_build", key, static_cast<long>(n), 0);
++        }
++      }
++    } else if (stop) {
++      break;
++    }
++  }
++  {
++    std::lock_guard<std::mutex> guard(g_ob_cuvs_mu);
++    auto it = g_ob_cuvs_reg.find(key);
++    if (it != g_ob_cuvs_reg.end()) { it->second->watch_inflight_ = false; }
++  }
++  return nullptr;
++}
++// Caller must hold g_ob_cuvs_mu (ob_cuvs_add does).
++static void ob_cuvs_start_watcher(void *key) {
++  if (key == nullptr || !ob_cuvs_enabled() || !ob_cuvs_eager_enabled()) { return; }
++  auto it = g_ob_cuvs_reg.find(key);
++  if (it == g_ob_cuvs_reg.end()) { return; }
++  ObCuvsEntry *ent = it->second;
++  if (ent->watch_inflight_ || ent->dim_ <= 0) { return; }
++  if (ent->buf_ids_.size() < OB_CUVS_MIN_PTS) { return; }
++  // Only kick a speculative rebuild on geometric growth; the tail is handled by
++  // the already-running watcher when the loader goes quiet.
++  if (ent->built_n_ != 0 && ent->buf_ids_.size() < ent->built_n_ * 2) { return; }
++  ObCuvsWatchArg *arg =
++      static_cast<ObCuvsWatchArg *>(::malloc(sizeof(ObCuvsWatchArg)));
++  if (arg == nullptr) { return; }
++  arg->key_ = key;
++  ent->watch_inflight_ = true;
++  pthread_t tid;
++  pthread_attr_t attr;
++  pthread_attr_init(&attr);
++  // cuVS needs a stack far larger than an OB worker thread's (~1.5MB).
++  pthread_attr_setstacksize(&attr, 32UL * 1024 * 1024);
++  if (pthread_create(&tid, &attr, ob_cuvs_watch_job, arg) == 0) {
++    pthread_detach(tid);
++  } else {
++    ::free(arg);
++    ent->watch_inflight_ = false;
++  }
++  pthread_attr_destroy(&attr);
++}
++// ==== end contest idle build ==============================================
++
+ static bool ob_cuvs_try_search(void *key, vsag::Allocator *alloc,
+                                const float *query, int /*dim*/, int64_t topk,
+                                const float *&dist, const int64_t *&ids,
+diff --git a/tools/hipvs_bridge/build.sh b/tools/hipvs_bridge/build.sh
+index d0a3b62b8..442689b2e 100755
+--- a/tools/hipvs_bridge/build.sh
++++ b/tools/hipvs_bridge/build.sh
+@@ -32,6 +32,7 @@ mkdir -p "$(dirname "$OUTPUT")"
+   -Wl,-soname,libseekdb_cuvs_bridge.so \
+   -Wl,-rpath,"$HIPVS_ROOT/lib:$ROCM_ROOT/lib" \
+   -lcuvs_c \
++  -lpthread \
+   -o "$OUTPUT"
+ 
+ echo "built $OUTPUT"
+diff --git a/tools/hipvs_bridge/seekdb_cuvs_bridge.c b/tools/hipvs_bridge/seekdb_cuvs_bridge.c
+index 88694f339..b8f73d9fd 100644
+--- a/tools/hipvs_bridge/seekdb_cuvs_bridge.c
++++ b/tools/hipvs_bridge/seekdb_cuvs_bridge.c
+@@ -1,4 +1,28 @@
+-/* seekdb <-> hipVS bridge: plain-C CAGRA kNN; all cuVS/ROCm deps live here. */
++/* seekdb <-> hipVS bridge: plain-C CAGRA kNN; all cuVS/ROCm deps live here.
++ *
++ * Contest optimisation notes (AMD eco track, seekdb x hipVS/cuVS, baseline v5):
++ *  1. Per-search device scratch (query / neighbor ids / distances) is pooled per
++ *     index and reused instead of being allocated and freed on every
++ *     knn_search call.  Concurrent searches each take their own slot, so
++ *     multi-client QPS does not serialise; a search that finds every slot busy
++ *     falls back to a private scratch and still runs on the GPU.
++ *  2. Build and search wall times are printed to stderr so the benchmark
++ *     harness can attribute time to the GPU stage and prove the graph was built
++ *     on the GPU inside the timed window (OB_CUVS_LOG=0 silences it).
++ *  3. Optional build knobs, defaulting to the baseline v5 values:
++ *        OB_CUVS_NN_ITER=<int>             nn-descent iterations   (v5: 100)
++ *        OB_CUVS_GRAPH_DEGREE=<int>        final graph degree      (v5: 128)
++ *        OB_CUVS_INTERMEDIATE_DEGREE=<int> intermediate degree     (v5: 256)
++ *     They only exist so the recall/build-time trade-off can be measured on the
++ *     contest data; leaving them unset reproduces the frozen v5 graph exactly.
++ */
++#ifndef _GNU_SOURCE
++#define _GNU_SOURCE 1
++#endif
++#ifndef _POSIX_C_SOURCE
++#define _POSIX_C_SOURCE 200809L
++#endif
++
+ #include "seekdb_cuvs_bridge.h"
+ #include <cuvs/core/c_api.h>
+ #include <cuvs/neighbors/cagra.h>
+@@ -8,20 +32,151 @@
+ #else
+ #include <cuda_runtime.h>
+ #endif
++#include <pthread.h>
+ #include <stdio.h>
+ #include <stdlib.h>
++#include <string.h>
++#include <time.h>
++
++/* Reusable search scratch slots per index (one per concurrent query). */
++#define SK_SLOT_COUNT 8
++
++typedef struct {
++  float* q;      /* device: nq x dim  */
++  unsigned* n;   /* device: nq x topk */
++  float* d;      /* device: nq x topk */
++  size_t q_cap;  /* capacities, in elements */
++  size_t n_cap;
++  size_t d_cap;
++  int busy;
++} sk_slot;
+ 
+ typedef struct {
+   cuvsResources_t        res;
+   cuvsCagraIndexParams_t ip;
+   cuvsCagraIndex_t       idx;
+   long n, dim;
++  pthread_mutex_t mu; /* guards slots[] only */
++  sk_slot slots[SK_SLOT_COUNT];
+ } sk_cuvs_index;
+ 
++static long sk_now_ms(void)
++{
++  struct timespec ts;
++  if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0) return 0;
++  return (long)ts.tv_sec * 1000L + (long)(ts.tv_nsec / 1000000L);
++}
++
++static int sk_log_enabled(void)
++{
++  const char* v = getenv("OB_CUVS_LOG");
++  return (v == NULL || v[0] != '0');
++}
++
++static int sk_env_int(const char* name, int def_val, int lo, int hi)
++{
++  const char* raw = getenv(name);
++  char* end = NULL;
++  long v = 0;
++  if (raw == NULL || raw[0] == '\0') return def_val;
++  v = strtol(raw, &end, 10);
++  if (end == raw) return def_val;
++  if (v < lo) v = lo;
++  if (v > hi) v = hi;
++  return (int)v;
++}
++
++static void sk_apply_build_knobs(cuvsCagraIndexParams_t ip)
++{
++  int niter = -1;
++  int degree = -1;
++  int idegree = -1;
++  if (ip == NULL) return;
++  niter = sk_env_int("OB_CUVS_NN_ITER", -1, 1, 400);
++  if (niter > 0) ip->nn_descent_niter = niter;
++  degree = sk_env_int("OB_CUVS_GRAPH_DEGREE", -1, 8, 512);
++  if (degree > 0) ip->graph_degree = degree;
++  idegree = sk_env_int("OB_CUVS_INTERMEDIATE_DEGREE", -1, 8, 1024);
++  if (idegree > 0) ip->intermediate_graph_degree = idegree;
++  if (sk_log_enabled()) {
++    fprintf(stderr, "[seekdb_cuvs] build_knobs niter=%d degree=%d intermediate=%d\n",
++            niter, degree, idegree);
++  }
++}
++
++static void sk_slot_release_dev(sk_cuvs_index* h, sk_slot* s)
++{
++  if (s->q != NULL) cuvsRMMFree(h->res, s->q, sizeof(float) * s->q_cap);
++  if (s->n != NULL) cuvsRMMFree(h->res, s->n, sizeof(unsigned) * s->n_cap);
++  if (s->d != NULL) cuvsRMMFree(h->res, s->d, sizeof(float) * s->d_cap);
++  s->q = NULL; s->n = NULL; s->d = NULL;
++  s->q_cap = 0; s->n_cap = 0; s->d_cap = 0;
++}
++
++/* Grow the slot so it can hold nq*dim floats and nq*topk results. */
++static int sk_slot_reserve(sk_cuvs_index* h, sk_slot* s, size_t q_need, size_t k_need)
++{
++  int rc = 0;
++  if (s->q == NULL || s->q_cap < q_need) {
++    if (s->q != NULL) { cuvsRMMFree(h->res, s->q, sizeof(float) * s->q_cap); s->q = NULL; s->q_cap = 0; }
++    if (cuvsRMMAlloc(h->res, (void**)&s->q, sizeof(float) * q_need) != CUVS_SUCCESS) { s->q = NULL; rc = 10; }
++    else s->q_cap = q_need;
++  }
++  if (rc == 0 && (s->n == NULL || s->n_cap < k_need)) {
++    if (s->n != NULL) { cuvsRMMFree(h->res, s->n, sizeof(unsigned) * s->n_cap); s->n = NULL; s->n_cap = 0; }
++    if (cuvsRMMAlloc(h->res, (void**)&s->n, sizeof(unsigned) * k_need) != CUVS_SUCCESS) { s->n = NULL; rc = 11; }
++    else s->n_cap = k_need;
++  }
++  if (rc == 0 && (s->d == NULL || s->d_cap < k_need)) {
++    if (s->d != NULL) { cuvsRMMFree(h->res, s->d, sizeof(float) * s->d_cap); s->d = NULL; s->d_cap = 0; }
++    if (cuvsRMMAlloc(h->res, (void**)&s->d, sizeof(float) * k_need) != CUVS_SUCCESS) { s->d = NULL; rc = 12; }
++    else s->d_cap = k_need;
++  }
++  return rc;
++}
++
++static sk_slot* sk_slot_acquire(sk_cuvs_index* h, sk_slot* spare, int* pooled)
++{
++  int i = 0;
++  sk_slot* slot = NULL;
++  *pooled = 0;
++  pthread_mutex_lock(&h->mu);
++  for (i = 0; i < SK_SLOT_COUNT; ++i) {
++    if (!h->slots[i].busy) {
++      h->slots[i].busy = 1;
++      slot = &h->slots[i];
++      *pooled = 1;
++      break;
++    }
++  }
++  pthread_mutex_unlock(&h->mu);
++  if (slot == NULL) {
++    /* More concurrent searches than slots: private scratch beats serialising. */
++    memset(spare, 0, sizeof(*spare));
++    slot = spare;
++  }
++  return slot;
++}
++
++static void sk_slot_give_back(sk_cuvs_index* h, sk_slot* slot, int pooled)
++{
++  if (pooled) {
++    pthread_mutex_lock(&h->mu);
++    slot->busy = 0;
++    pthread_mutex_unlock(&h->mu);
++  } else {
++    sk_slot_release_dev(h, slot);
++  }
++}
++
++
+ void* seekdb_cuvs_build(const float* base, long n, long dim)
+ {
+   sk_cuvs_index* h = (sk_cuvs_index*)calloc(1, sizeof(*h));
++  long t0 = 0;
+   if (!h) return NULL;
++  if (base == NULL || n <= 0 || dim <= 0) { free(h); return NULL; }
++  pthread_mutex_init(&h->mu, NULL);
+   if (cuvsResourcesCreate(&h->res) != CUVS_SUCCESS) { free(h); return NULL; }
+ 
+   DLManagedTensor dset; long ds[2] = {n, dim};
+@@ -36,14 +191,20 @@ void* seekdb_cuvs_build(const float* base, long n, long dim)
+   h->ip->graph_degree = 128;
+   h->ip->intermediate_graph_degree = 256;
+   h->ip->nn_descent_niter = 100;
++  sk_apply_build_knobs(h->ip);
+   if (cuvsCagraIndexCreate(&h->idx)      != CUVS_SUCCESS) goto fail_ip;
++  t0 = sk_now_ms();
+   if (cuvsCagraBuild(h->res, h->ip, &dset, h->idx) != CUVS_SUCCESS) goto fail_idx;
++  if (sk_log_enabled()) {
++    fprintf(stderr, "[seekdb_cuvs] build n=%ld dim=%ld ms=%ld\n", n, dim, sk_now_ms() - t0);
++  }
+   h->n = n; h->dim = dim;
+   return h;
+ 
+ fail_idx: cuvsCagraIndexDestroy(h->idx);
+ fail_ip:  cuvsCagraIndexParamsDestroy(h->ip);
+-fail_res: cuvsResourcesDestroy(h->res); free(h);
++fail_res: pthread_mutex_destroy(&h->mu);
++  cuvsResourcesDestroy(h->res); free(h);
+   fprintf(stderr, "[seekdb_cuvs] build failed: %s\n", cuvsGetLastErrorText());
+   return NULL;
+ }
+@@ -52,20 +213,32 @@ int seekdb_cuvs_search(void* handle, const float* query, long nq, long topk,
+                        unsigned int* out_ids, float* out_dist)
+ {
+   sk_cuvs_index* h = (sk_cuvs_index*)handle;
+-  if (!h) return 1;
++  sk_slot spare;
++  sk_slot* slot = NULL;
++  cuvsCagraSearchParams_t sp = 0;
++  size_t q_need = 0, k_need = 0;
+   int rc = 0;
+-  float* qd = 0; unsigned* nd = 0; float* dd = 0; cuvsCagraSearchParams_t sp = 0;
+-  if (cuvsRMMAlloc(h->res, (void**)&qd, sizeof(float)*nq*h->dim)  != CUVS_SUCCESS) { rc=10; goto done; }
+-  if (cuvsRMMAlloc(h->res, (void**)&nd, sizeof(unsigned)*nq*topk) != CUVS_SUCCESS) { rc=11; goto done; }
+-  if (cuvsRMMAlloc(h->res, (void**)&dd, sizeof(float)*nq*topk)    != CUVS_SUCCESS) { rc=12; goto done; }
+-  if (cudaMemcpy(qd, query, sizeof(float)*nq*h->dim, cudaMemcpyDefault) != cudaSuccess) { rc=13; goto done; }
++  int pooled = 0;
++  long t0 = 0;
++
++  if (!h) return 1;
++  if (query == NULL || out_ids == NULL || nq <= 0 || topk <= 0 || h->dim <= 0) return 2;
++
++  q_need = (size_t)nq * (size_t)h->dim;
++  k_need = (size_t)nq * (size_t)topk;
++  slot = sk_slot_acquire(h, &spare, &pooled);
++  t0 = sk_now_ms();
++  rc = sk_slot_reserve(h, slot, q_need, k_need);
++  if (rc != 0) goto done;
++  if (cudaMemcpy(slot->q, query, sizeof(float)*q_need, cudaMemcpyDefault) != cudaSuccess) { rc=13; goto done; }
+   {
+     DLManagedTensor qt, nt, dt; long qs[2]={nq,h->dim}, nsh[2]={nq,topk}, dsh[2]={nq,topk};
+-    qt.dl_tensor.data=qd; qt.dl_tensor.device.device_type=kDLCUDA; qt.dl_tensor.device.device_id=0;
++    memset(&qt, 0, sizeof(qt));
++    qt.dl_tensor.data=slot->q; qt.dl_tensor.device.device_type=kDLCUDA; qt.dl_tensor.device.device_id=0;
+     qt.dl_tensor.ndim=2; qt.dl_tensor.dtype.code=kDLFloat; qt.dl_tensor.dtype.bits=32; qt.dl_tensor.dtype.lanes=1;
+     qt.dl_tensor.shape=qs; qt.dl_tensor.strides=0; qt.dl_tensor.byte_offset=0;
+-    nt=qt; nt.dl_tensor.data=nd; nt.dl_tensor.dtype.code=kDLUInt; nt.dl_tensor.shape=nsh;
+-    dt=qt; dt.dl_tensor.data=dd; dt.dl_tensor.dtype.code=kDLFloat; dt.dl_tensor.shape=dsh;
++    nt=qt; nt.dl_tensor.data=slot->n; nt.dl_tensor.dtype.code=kDLUInt; nt.dl_tensor.shape=nsh;
++    dt=qt; dt.dl_tensor.data=slot->d; dt.dl_tensor.dtype.code=kDLFloat; dt.dl_tensor.shape=dsh;
+     if (cuvsCagraSearchParamsCreate(&sp) != CUVS_SUCCESS) { rc=14; goto done; }
+     {
+       size_t required_itopk = (size_t)topk * 4;
+@@ -73,26 +246,34 @@ int seekdb_cuvs_search(void* handle, const float* query, long nq, long topk,
+       if (sp->itopk_size < required_itopk) sp->itopk_size = required_itopk;
+       sp->search_width = 4;
+     }
+-    cuvsFilter f; f.type=NO_FILTER; f.addr=(uintptr_t)0;
+-    if (cuvsCagraSearch(h->res, sp, h->idx, &qt, &nt, &dt, f) != CUVS_SUCCESS) { rc=15; goto done; }
+-    if (cudaMemcpy(out_ids, nd, sizeof(unsigned)*nq*topk, cudaMemcpyDefault) != cudaSuccess) { rc=16; goto done; }
+-    if (out_dist) cudaMemcpy(out_dist, dd, sizeof(float)*nq*topk, cudaMemcpyDefault);
++    {
++      cuvsFilter f; f.type=NO_FILTER; f.addr=(uintptr_t)0;
++      if (cuvsCagraSearch(h->res, sp, h->idx, &qt, &nt, &dt, f) != CUVS_SUCCESS) { rc=15; goto done; }
++    }
++    if (cudaMemcpy(out_ids, slot->n, sizeof(unsigned)*k_need, cudaMemcpyDefault) != cudaSuccess) { rc=16; goto done; }
++    if (out_dist &&
++        cudaMemcpy(out_dist, slot->d, sizeof(float)*k_need, cudaMemcpyDefault) != cudaSuccess) { rc=17; }
+   }
+ done:
+   if (sp) cuvsCagraSearchParamsDestroy(sp);
+-  if (dd) cuvsRMMFree(h->res, dd, sizeof(float)*nq*topk);
+-  if (nd) cuvsRMMFree(h->res, nd, sizeof(unsigned)*nq*topk);
+-  if (qd) cuvsRMMFree(h->res, qd, sizeof(float)*nq*h->dim);
+-  if (rc) fprintf(stderr, "[seekdb_cuvs] search rc=%d: %s\n", rc, cuvsGetLastErrorText());
++  sk_slot_give_back(h, slot, pooled);
++  if (rc) {
++    fprintf(stderr, "[seekdb_cuvs] search rc=%d: %s\n", rc, cuvsGetLastErrorText());
++  } else if (sk_log_enabled()) {
++    fprintf(stderr, "[seekdb_cuvs] search nq=%ld topk=%ld ms=%ld\n", nq, topk, sk_now_ms() - t0);
++  }
+   return rc;
+ }
+ 
+ void seekdb_cuvs_free(void* handle)
+ {
+   sk_cuvs_index* h = (sk_cuvs_index*)handle;
++  int i = 0;
+   if (!h) return;
++  for (i = 0; i < SK_SLOT_COUNT; ++i) sk_slot_release_dev(h, &h->slots[i]);
+   cuvsCagraIndexDestroy(h->idx);
+   cuvsCagraIndexParamsDestroy(h->ip);
++  pthread_mutex_destroy(&h->mu);
+   cuvsResourcesDestroy(h->res);
+   free(h);
+ }
+@@ -113,6 +294,7 @@ void* seekdb_cuvs_deserialize(const char* filename, long n, long dim)
+   if (!filename || n <= 0 || dim <= 0) return NULL;
+   sk_cuvs_index* index = (sk_cuvs_index*)calloc(1, sizeof(*index));
+   if (!index) return NULL;
++  pthread_mutex_init(&index->mu, NULL);
+   if (cuvsResourcesCreate(&index->res) != CUVS_SUCCESS) goto fail;
+   if (cuvsCagraIndexParamsCreate(&index->ip) != CUVS_SUCCESS) goto fail_res;
+   if (cuvsCagraIndexCreate(&index->idx) != CUVS_SUCCESS) goto fail_ip;
+@@ -139,6 +321,7 @@ fail_res:
+   cuvsResourcesDestroy(index->res);
+ fail:
+   fprintf(stderr, "[seekdb_cuvs] deserialize failed: %s\n", cuvsGetLastErrorText());
++  pthread_mutex_destroy(&index->mu);
+   free(index);
+   return NULL;
+ }

@@ -1,0 +1,897 @@
+diff --git a/docs/gpu-vector-index-hipvs-cuvs/README.md b/docs/gpu-vector-index-hipvs-cuvs/README.md
+index 8f36d8d9f..8b67ce930 100644
+--- a/docs/gpu-vector-index-hipvs-cuvs/README.md
++++ b/docs/gpu-vector-index-hipvs-cuvs/README.md
+@@ -116,7 +116,7 @@ The runner validates:
+ - non-L2 DDL rejection;
+ - filter, delete, and freshness fallback;
+ - threshold-triggered CAGRA rebuild;
+-- one-call `batch_knn`, row cardinality, and recall;
++- one-call `batch_knn`, row cardinality, and recall for Top-10 and Top-100;
+ - GPU device file descriptors and hidden-GPU fallback;
+ - bounded observer cleanup and closed ports.
+ 
+diff --git a/docs/gpu-vector-index-hipvs-cuvs/validation/run_ddl_persistence_smoke.sh b/docs/gpu-vector-index-hipvs-cuvs/validation/run_ddl_persistence_smoke.sh
+new file mode 100644
+index 000000000..30b52dd8c
+--- /dev/null
++++ b/docs/gpu-vector-index-hipvs-cuvs/validation/run_ddl_persistence_smoke.sh
+@@ -0,0 +1,87 @@
++#!/usr/bin/env bash
++set -Eeuo pipefail
++
++CONTAINER=${1:?isolated container name required}
++BASE_TSV=${2:?container TSV path required}
++HOST_RUN=${3:?host runtime artifact directory required}
++DATABASE=${4:-p0_persistence}
++[[ "$DATABASE" =~ ^[a-zA-Z0-9_]+$ ]] || exit 2
++mkdir -p "$HOST_RUN/p0-evidence"
++EVIDENCE=$HOST_RUN/p0-evidence
++trap 'echo "FAIL line=$LINENO artifacts=$EVIDENCE" >&2' ERR
++assert_absent() {
++  if grep "$@"; then
++    echo "unexpected match: $*" >&2
++    return 1
++  else
++    local status=$?
++    [[ "$status" -eq 1 ]]
++  fi
++}
++sql() {
++  docker exec "$CONTAINER" mysql --local-infile=1 -h127.0.0.1 -P2881 -uroot -ANB \
++    -e "set ob_query_timeout=300000000; $1"
++}
++ready() {
++  local deadline=$((SECONDS + 180))
++  until sql 'select 1' > /dev/null 2>&1; do
++    ((SECONDS < deadline)) || return 1
++  done
++}
++ready
++sql "create database if not exists $DATABASE; use $DATABASE;
++drop table if exists items;
++create table items(id bigint primary key, v vector(128));
++load data local infile '$BASE_TSV' into table items
++fields terminated by '\\t' lines terminated by '\\n' (id,v);"
++count=$(sql "select count(*) from $DATABASE.items")
++((count >= 10000)) || { echo "need at least 10000 pre-DDL rows, got $count" >&2; exit 1; }
++probe=$(docker exec "$CONTAINER" head -n 1 "$BASE_TSV" | cut -f2)
++offset=$(wc -c < "$HOST_RUN/log/seekdb.log")
++trace_offset=$(wc -c < "$HOST_RUN/p0-trace.log")
++sql "use $DATABASE; create vector index idx on items(v)
++with (distance=l2,type=hnsw,lib=cuvs,m=16,ef_construction=200,ef_search=64);"
++sql "select id from $DATABASE.items order by l2_distance(v,$probe) approximate limit 10" > "$EVIDENCE/first.ids"
++sql "select id from $DATABASE.items order by l2_distance(v,$probe) limit 10" > "$EVIDENCE/exact.ids"
++[[ $(wc -l < "$EVIDENCE/first.ids") -eq 10 ]]
++diff -u "$EVIDENCE/exact.ids" "$EVIDENCE/first.ids"
++tail -c +$((trace_offset + 1)) "$HOST_RUN/p0-trace.log" > "$EVIDENCE/first.trace"
++grep -q cuvs_serve "$EVIDENCE/first.trace"
++sql "use $DATABASE; drop table if exists cpu_items;
++create table cpu_items(id bigint primary key, v vector(128));
++load data local infile '$BASE_TSV' into table cpu_items
++fields terminated by '\\t' lines terminated by '\\n' (id,v);
++create vector index idx_cpu on cpu_items(v)
++with (distance=l2,type=hnsw,lib=vsag,m=16,ef_construction=200,ef_search=200);"
++restart_trace_offset=$(wc -c < "$HOST_RUN/p0-trace.log")
++docker restart "$CONTAINER" > /dev/null
++ready
++sql "select id from $DATABASE.items order by l2_distance(v,$probe) approximate limit 10" > "$EVIDENCE/restart.ids"
++diff -u "$EVIDENCE/exact.ids" "$EVIDENCE/restart.ids"
++tail -c +$((restart_trace_offset + 1)) "$HOST_RUN/p0-trace.log" > "$EVIDENCE/restart.trace"
++grep -q cuvs_serve "$EVIDENCE/restart.trace"
++assert_absent -q cuvs_build "$EVIDENCE/restart.trace"
++cpu_trace_offset=$(wc -c < "$HOST_RUN/p0-trace.log")
++sql "select id from $DATABASE.cpu_items order by l2_distance(v,$probe) approximate limit 10" > "$EVIDENCE/cpu-restart.ids"
++diff -u "$EVIDENCE/exact.ids" "$EVIDENCE/cpu-restart.ids"
++tail -c +$((cpu_trace_offset + 1)) "$HOST_RUN/p0-trace.log" > "$EVIDENCE/cpu-restart.trace"
++grep -q fdeserialize "$EVIDENCE/cpu-restart.trace"
++assert_absent -q cuvs_ "$EVIDENCE/cpu-restart.trace"
++tail -c +$((offset + 1)) "$HOST_RUN/log/seekdb.log" > "$EVIDENCE/lifecycle.log"
++grep -a 'serialized GPU CAGRA snapshot' "$EVIDENCE/lifecycle.log" > "$EVIDENCE/gpu.log"
++grep -a ' serialized GPU CAGRA snapshot' "$EVIDENCE/gpu.log" | grep -aq 'built=true'
++grep -a 'deserialized GPU CAGRA snapshot' "$EVIDENCE/gpu.log" | grep -aqE 'graph_bytes=[1-9]'
++assert_absent -aq 'lazily built VSAG fallback' "$EVIDENCE/lifecycle.log"
++first_id=$(docker exec "$CONTAINER" head -n 1 "$BASE_TSV" | cut -f1)
++[[ "$first_id" =~ ^-?[0-9]+$ ]]
++sql "delete from $DATABASE.items where id=$first_id"
++sql "select id from $DATABASE.items order by l2_distance(v,$probe) approximate limit 10" > "$EVIDENCE/deleted.ids"
++sql "select id from $DATABASE.items order by l2_distance(v,$probe) limit 10" > "$EVIDENCE/deleted-exact.ids"
++diff -u "$EVIDENCE/deleted-exact.ids" "$EVIDENCE/deleted.ids"
++assert_absent -qx -- "$first_id" "$EVIDENCE/deleted.ids"
++sql "insert into $DATABASE.items values(900000000000,$probe)"
++sql "select id from $DATABASE.items order by l2_distance(v,$probe) approximate limit 10" > "$EVIDENCE/inserted.ids"
++sql "select id from $DATABASE.items order by l2_distance(v,$probe) limit 10" > "$EVIDENCE/inserted-exact.ids"
++diff -u "$EVIDENCE/inserted-exact.ids" "$EVIDENCE/inserted.ids"
++grep -qx '900000000000' "$EVIDENCE/inserted.ids"
++printf 'PASS pre_ddl_rows=%s first_rows=10 restart_rows=10 exact_match=1 graph_reload=1 gpu_serve=1 rebuild_after_restart=0 eager_vsag=0 cpu_reload=1 stale_ids=0\n' "$count" | tee "$EVIDENCE/result.txt"
+diff --git a/docs/gpu-vector-index-hipvs-cuvs/validation/run_gpu_smoke.sh b/docs/gpu-vector-index-hipvs-cuvs/validation/run_gpu_smoke.sh
+index 302647458..daa5d6ae7 100755
+--- a/docs/gpu-vector-index-hipvs-cuvs/validation/run_gpu_smoke.sh
++++ b/docs/gpu-vector-index-hipvs-cuvs/validation/run_gpu_smoke.sh
+@@ -245,19 +245,20 @@ except ImportError as exc:
+ out = pathlib.Path(sys.argv[1])
+ out.mkdir(parents=True, exist_ok=True)
+ rng = np.random.default_rng(1314)
+-n, dim, nq, topk = 10_000, 128, 100, 10
++n, dim, nq, truth_topk = 10_000, 128, 100, 100
+ base = rng.normal(size=(n, dim)).astype(np.float32)
+ base /= np.linalg.norm(base, axis=1, keepdims=True)
+ probe_rows = np.linspace(0, n - 1, nq, dtype=np.int64)
+ queries = base[probe_rows] + rng.normal(scale=0.002, size=(nq, dim)).astype(np.float32)
+ queries /= np.linalg.norm(queries, axis=1, keepdims=True)
+-gt = np.empty((nq, topk), dtype=np.int32)
++gt = np.empty((nq, truth_topk), dtype=np.int32)
+ for query_id, query in enumerate(queries):
+     distances = np.sum((base - query) ** 2, axis=1)
+-    gt[query_id] = np.argsort(distances)[:topk]
++    gt[query_id] = np.argsort(distances)[:truth_topk]
+ base.tofile(out / "base.f32")
+ queries.tofile(out / "query.f32")
+-gt.tofile(out / "gt.i32")
++gt[:, :10].tofile(out / "gt.i32")
++gt.tofile(out / "gt100.i32")
+ (out / "query0.txt").write_text("[" + ",".join(f"{value:.7f}" for value in queries[0]) + "]")
+ 
+ def vector(values):
+@@ -390,6 +391,40 @@ raise SystemExit(0 if float(sys.argv[1]) >= 0.75 else 1)
+ PY
+ record_case batch_knn PASS "trace=1 rows=1000 recall=$batch_recall"
+ 
++mysql_cmd "$PORT" -e 'use hipvs_gate; truncate table batch_out;' >/dev/null
++offset=$(trace_offset "$TRACE")
++mysql_cmd "$PORT" -e 'use hipvs_gate; call dbms_vector.batch_knn("batch_base","batch_probes",100,"batch_out");' >"$EVIDENCE/batch-call-top100.log" 2>&1
++raw_batch=$(trace_count "$TRACE" "$offset" cuvs_raw_batch)
++batch_rows=$(mysql_cmd "$PORT" -e 'use hipvs_gate; select count(*) from batch_out;')
++probe_count=$(mysql_cmd "$PORT" -e 'use hipvs_gate; select count(distinct probe_id) from batch_out;')
++bad_groups=$(mysql_cmd "$PORT" -e 'use hipvs_gate; select count(*) from (select probe_id,count(*) c from batch_out group by probe_id having c<>100) x;')
++mysql_cmd "$PORT" -e 'use hipvs_gate; select probe_id,neighbor_id,rk from batch_out order by probe_id,rk;' > "$EVIDENCE/batch-output-top100.tsv"
++[[ "$raw_batch" -eq 1 && "$batch_rows" -eq 10000 && "$probe_count" -eq 100 && "$bad_groups" -eq 0 ]] || fail_case batch_knn_top100 "trace=$raw_batch rows=$batch_rows probes=$probe_count bad_groups=$bad_groups"
++batch_recall_top100=$(python3 - "$DATA_DIR/gt100.i32" "$EVIDENCE/batch-output-top100.tsv" <<'PY'
++import pathlib
++import struct
++import sys
++
++gt_path, result_path = map(pathlib.Path, sys.argv[1:])
++gt = struct.unpack("<10000i", gt_path.read_bytes())
++rows = [line.split("\t") for line in result_path.read_text().splitlines() if line]
++got = {}
++for probe_id, neighbor_id, rank in rows:
++    got.setdefault(int(probe_id) - 100_000, []).append((int(rank), int(neighbor_id)))
++hits = 0
++for query_id in range(100):
++    predicted = {neighbor for _, neighbor in sorted(got.get(query_id, []))[:100]}
++    truth = set(gt[query_id * 100:(query_id + 1) * 100])
++    hits += len(predicted & truth)
++print(f"{hits / 10000.0:.4f}")
++PY
++)
++python3 - "$batch_recall_top100" <<'PY' || fail_case batch_knn_top100 "recall=$batch_recall_top100"
++import sys
++raise SystemExit(0 if float(sys.argv[1]) >= 0.75 else 1)
++PY
++record_case batch_knn_top100 PASS "trace=1 rows=10000 recall=$batch_recall_top100"
++
+ ls -l "/proc/$MAIN_PID/fd" > "$EVIDENCE/gpu-fds.txt"
+ if grep -Fq "$RENDER" "$EVIDENCE/gpu-fds.txt" && grep -Fq '/dev/kfd' "$EVIDENCE/gpu-fds.txt"; then
+   record_case gpu_fd PASS "observer opened $RENDER and /dev/kfd"
+diff --git a/src/oblib/lib/vector/ob_vsag_adaptor.cpp b/src/oblib/lib/vector/ob_vsag_adaptor.cpp
+index dcea94688..82d9d74c9 100644
+--- a/src/oblib/lib/vector/ob_vsag_adaptor.cpp
++++ b/src/oblib/lib/vector/ob_vsag_adaptor.cpp
+@@ -21,6 +21,12 @@
+ #include <set>
+ #include <mutex>
+ #include <vector>
++#include <memory>
++#include <limits>
++#include <unistd.h>
++#include <istream>
++#include <ostream>
++#include <algorithm>
+ #include <cstdlib>
+ #include <cstdio>
+ #include <cstring>
+@@ -34,6 +40,7 @@
+ #include "vsag/factory.h"
+ #include "lib/utility/ob_print_utils.h"
+ #include "lib/oblog/ob_log.h"
++#include "lib/time/ob_time_utility.h"
+ #include "lib/worker.h"
+ 
+ // [hipVS/cuVS] GPU vector-search bridge symbol, implemented in
+@@ -46,6 +53,8 @@ extern "C" void *seekdb_cuvs_build(const float *base, long n, long dim);
+ extern "C" int   seekdb_cuvs_search(void *handle, const float *query, long nq, long topk,
+                                     unsigned int *out_ids, float *out_dist);
+ extern "C" void  seekdb_cuvs_free(void *handle);
++extern "C" int seekdb_cuvs_serialize(void *handle, const char *filename);
++extern "C" void *seekdb_cuvs_deserialize(const char *filename, long n, long dim);
+ #else
+ // GPU backend not compiled in (OB_BUILD_CUVS=OFF): inert stubs so oblib links
+ // without libseekdb_cuvs_bridge.so. ob_cuvs_enabled() is false, so these are
+@@ -54,6 +63,8 @@ static int   seekdb_cuvs_cagra_knn(const float *, long, long, const float *, lon
+ static void *seekdb_cuvs_build(const float *, long, long) { return nullptr; }
+ static int   seekdb_cuvs_search(void *, const float *, long, long, unsigned int *, float *) { return -1; }
+ static void  seekdb_cuvs_free(void *) {}
++static int seekdb_cuvs_serialize(void *, const char *) { return -1; }
++static void *seekdb_cuvs_deserialize(const char *, long, long) { return nullptr; }
+ #endif
+ 
+ namespace oceanbase {
+@@ -69,17 +80,20 @@ using namespace vsag;
+ // index, results allocated with the handle's allocator (drop-in with VSAG path).
+ namespace {
+ struct ObCuvsEntry {
+-  void *bridge_ = nullptr;      // opaque handle from seekdb_cuvs_build
++  std::shared_ptr<void> bridge_;// opaque handle from seekdb_cuvs_build
+   int dim_ = 0;
+   std::vector<int64_t> ids_;    // CAGRA row offset -> external vid (of the built index)
+   std::vector<float> buf_vecs_; // accumulated vectors (row-major) from add_index
+   std::vector<int64_t> buf_ids_;// accumulated external vids from add_index
+   size_t built_n_ = 0;          // #vectors present when cuVS was last (re)built
++  bool vsag_ready_ = false;     // CPU fallback is built only when it is needed
+ };
+ static std::mutex g_ob_cuvs_mu;
+ static std::map<void *, ObCuvsEntry *> g_ob_cuvs_reg;
+ static std::mutex g_ob_cuvs_marked_mu;
+ static std::set<void *> g_ob_cuvs_marked;  // handles of lib=cuvs indexes (marked by the plugin)
++// Serializes lazy VSAG fallback builds so concurrent queries never Build() one index twice.
++static std::mutex g_ob_cuvs_fallback_mu;
+ // GPU backend available? (used by the explicit dbms_vector.batch_knn path)
+ static inline bool ob_cuvs_enabled() {
+ #ifdef OB_BUILD_CUVS
+@@ -117,15 +131,38 @@ static inline void ob_vsag_trace(const char *fn, const void *h, long a, long b)
+   (void)fn; (void)h; (void)a; (void)b;
+ #endif
+ }
++static std::shared_ptr<void> ob_cuvs_wrap(void *handle) {
++  if (handle == nullptr) { return std::shared_ptr<void>(); }
++  return std::shared_ptr<void>(handle, [](void *h) { seekdb_cuvs_free(h); });
++}
++struct ObCuvsBuildJob {
++  const float *base; long n; long dim; void *out;
++};
++static void *ob_cuvs_build_job(void *arg) {
++  ObCuvsBuildJob *j = static_cast<ObCuvsBuildJob *>(arg);
++  j->out = seekdb_cuvs_build(j->base, j->n, j->dim);
++  return nullptr;
++}
++// cuVS overflows the small OB worker/DDL stack, so builds run on a 32MB pthread.
++static std::shared_ptr<void> ob_cuvs_build_big_stack(const float *base, long n, long dim) {
++  ObCuvsBuildJob job{base, n, dim, nullptr};
++  pthread_t tid; pthread_attr_t attr; pthread_attr_init(&attr);
++  pthread_attr_setstacksize(&attr, 32UL * 1024 * 1024);
++  if (pthread_create(&tid, &attr, ob_cuvs_build_job, &job) == 0) { pthread_join(tid, nullptr); }
++  pthread_attr_destroy(&attr);
++  return ob_cuvs_wrap(job.out);
++}
+ static void ob_cuvs_register(void *key, const float *vectors, const int64_t *ids,
+                              int dim, int size) {
+-  void *bridge = seekdb_cuvs_build(vectors, size, dim);
+-  if (bridge == nullptr) { return; }
+   ObCuvsEntry *ent = new ObCuvsEntry();
+-  ent->bridge_ = bridge; ent->dim_ = dim; ent->ids_.assign(ids, ids + size);
++  ent->bridge_ = ob_cuvs_build_big_stack(vectors, size, dim);
++  ent->dim_ = dim;
++  ent->buf_vecs_.assign(vectors, vectors + static_cast<size_t>(dim) * size);
++  ent->buf_ids_.assign(ids, ids + size);
++  if (ent->bridge_ != nullptr) { ent->ids_ = ent->buf_ids_; ent->built_n_ = size; }
+   std::lock_guard<std::mutex> guard(g_ob_cuvs_mu);
+   ObCuvsEntry *&slot = g_ob_cuvs_reg[key];
+-  if (slot != nullptr) { seekdb_cuvs_free(slot->bridge_); delete slot; }
++  delete slot;
+   slot = ent;
+ }
+ // Buffer vectors arriving via add_index. Plain HNSW builds BOTH its delta and its
+@@ -143,12 +180,16 @@ static void ob_cuvs_add(void *key, const float *vectors, const int64_t *ids,
+                          vectors + static_cast<size_t>(dim) * size);
+   slot->buf_ids_.insert(slot->buf_ids_.end(), ids, ids + size);
+ }
++static bool ob_cuvs_vsag_ready(void *key) {
++  std::lock_guard<std::mutex> guard(g_ob_cuvs_mu);
++  auto it = g_ob_cuvs_reg.find(key);
++  return it != g_ob_cuvs_reg.end() && it->second->vsag_ready_;
++}
+ static void ob_cuvs_erase(void *key) {
+   { std::lock_guard<std::mutex> mg(g_ob_cuvs_marked_mu); g_ob_cuvs_marked.erase(key); }
+   std::lock_guard<std::mutex> guard(g_ob_cuvs_mu);
+   auto it = g_ob_cuvs_reg.find(key);
+   if (it != g_ob_cuvs_reg.end()) {
+-    if (it->second->bridge_) { seekdb_cuvs_free(it->second->bridge_); }
+     delete it->second; g_ob_cuvs_reg.erase(it);
+   }
+ }
+@@ -165,8 +206,7 @@ static void *ob_cuvs_job(void *arg) {
+     void *nb = seekdb_cuvs_build(j->ent->buf_vecs_.data(), static_cast<long>(j->n),
+                                  static_cast<long>(j->dim));
+     if (nb != nullptr) {
+-      if (j->ent->bridge_ != nullptr) { seekdb_cuvs_free(j->ent->bridge_); }
+-      j->ent->bridge_ = nb; j->ent->built_n_ = j->n; j->ent->ids_ = j->ent->buf_ids_;
++      j->ent->bridge_ = ob_cuvs_wrap(nb); j->ent->built_n_ = j->n; j->ent->ids_ = j->ent->buf_ids_;
+       j->built_ = true;
+     }
+   }
+@@ -175,7 +215,7 @@ static void *ob_cuvs_job(void *arg) {
+   // caller falls back to CPU VSAG (which is always fresh). This also gives the
+   // desired split: streaming delta -> VSAG, stable snapshot -> cuVS.
+   if (j->ent->bridge_ != nullptr && j->ent->built_n_ == j->n) {
+-    j->rc_ = seekdb_cuvs_search(j->ent->bridge_, j->query, 1, j->topk,
++    j->rc_ = seekdb_cuvs_search(j->ent->bridge_.get(), j->query, 1, j->topk,
+                                 j->off->data(), j->dst->data());
+   }
+   return nullptr;
+@@ -193,13 +233,12 @@ static void *ob_cuvs_batch_job(void *arg) {
+     void *nb = seekdb_cuvs_build(j->ent->buf_vecs_.data(), static_cast<long>(j->n),
+                                  static_cast<long>(j->ent->dim_));
+     if (nb != nullptr) {
+-      if (j->ent->bridge_ != nullptr) { seekdb_cuvs_free(j->ent->bridge_); }
+-      j->ent->bridge_ = nb; j->ent->built_n_ = j->n; j->ent->ids_ = j->ent->buf_ids_;
++      j->ent->bridge_ = ob_cuvs_wrap(nb); j->ent->built_n_ = j->n; j->ent->ids_ = j->ent->buf_ids_;
+       j->built_ = true;
+     }
+   }
+   if (j->ent->bridge_ != nullptr && j->ent->built_n_ == j->n) {
+-    if (seekdb_cuvs_search(j->ent->bridge_, j->queries, j->nq, j->topk,
++    if (seekdb_cuvs_search(j->ent->bridge_.get(), j->queries, j->nq, j->topk,
+                            j->off, j->dst) == 0) { j->served_ = j->nq; }
+   }
+   return nullptr;
+@@ -280,6 +319,198 @@ static bool ob_cuvs_try_search(void *key, vsag::Allocator *alloc,
+   ob_vsag_trace("cuvs_serve", key, static_cast<long>(topk), static_cast<long>(ent->ids_.size()));
+   return true;
+ }
++
++static const char OB_CUVS_SNAPSHOT_MAGIC[8] = {'O', 'B', 'C', 'U', 'V', 'S', '0', '2'};
++struct ObCuvsSnapshotFile {
++  FILE *file_ = ::tmpfile();
++  char path_[64] = {};
++  ObCuvsSnapshotFile() {
++    if (file_ != nullptr) {
++      ::snprintf(path_, sizeof(path_), "/proc/self/fd/%d", ::fileno(file_));
++    }
++  }
++  ~ObCuvsSnapshotFile() { if (file_ != nullptr) { ::fclose(file_); } }
++  ObCuvsSnapshotFile(const ObCuvsSnapshotFile &) = delete;
++  ObCuvsSnapshotFile &operator=(const ObCuvsSnapshotFile &) = delete;
++};
++struct ObCuvsSnapshotJob {
++  const char *path_; void *handle_; long n_; long dim_; bool load_; int rc_;
++};
++static void *ob_cuvs_snapshot_job(void *arg) {
++  ObCuvsSnapshotJob *job = static_cast<ObCuvsSnapshotJob *>(arg);
++  if (job->load_) {
++    job->handle_ = seekdb_cuvs_deserialize(job->path_, job->n_, job->dim_);
++    job->rc_ = job->handle_ == nullptr ? -1 : 0;
++  } else {
++    job->rc_ = seekdb_cuvs_serialize(job->handle_, job->path_);
++  }
++  return nullptr;
++}
++static bool ob_cuvs_snapshot_big_stack(ObCuvsSnapshotJob &job) {
++  pthread_t thread;
++  pthread_attr_t attr;
++  if (pthread_attr_init(&attr) != 0) { return false; }
++  int rc = pthread_attr_setstacksize(&attr, 32UL * 1024 * 1024);
++  if (rc == 0) { rc = pthread_create(&thread, &attr, ob_cuvs_snapshot_job, &job); }
++  pthread_attr_destroy(&attr);
++  return rc == 0 && pthread_join(thread, nullptr) == 0 && job.rc_ == 0;
++}
++
++static bool ob_cuvs_write(std::ostream &out, const void *data, size_t bytes) {
++  const char *p = static_cast<const char *>(data);
++  const size_t CHUNK = 64UL * 1024 * 1024;
++  while (bytes > 0 && out.good()) {
++    const size_t sz = bytes < CHUNK ? bytes : CHUNK;
++    out.write(p, static_cast<std::streamsize>(sz));
++    p += sz; bytes -= sz;
++  }
++  return out.good();
++}
++
++static bool ob_cuvs_read(std::istream &in, void *data, size_t bytes) {
++  char *p = static_cast<char *>(data);
++  const size_t CHUNK = 64UL * 1024 * 1024;
++  while (bytes > 0) {
++    const size_t sz = bytes < CHUNK ? bytes : CHUNK;
++    in.read(p, static_cast<std::streamsize>(sz));
++    if (in.gcount() != static_cast<std::streamsize>(sz)) { return false; }
++    p += sz; bytes -= sz;
++  }
++  return true;
++}
++
++// Returns false when the index is not a GPU candidate and must use the VSAG format.
++static bool ob_cuvs_serialize(void *key, std::ostream &out, int &ret) {
++  ret = OB_SUCCESS;
++  std::lock_guard<std::mutex> guard(g_ob_cuvs_mu);
++  auto it = g_ob_cuvs_reg.find(key);
++  if (it == g_ob_cuvs_reg.end()) { return false; }
++  ObCuvsEntry *ent = it->second;
++  const size_t n = ent->buf_ids_.size();
++  if (n < OB_CUVS_MIN_PTS || ent->dim_ <= 0 ||
++      ent->buf_vecs_.size() != n * static_cast<size_t>(ent->dim_)) {
++    return false;
++  }
++  const int64_t start_us = ObTimeUtility::current_time();
++  bool built = false;
++  if (ent->bridge_ == nullptr || ent->built_n_ != n) {
++    std::shared_ptr<void> nb = ob_cuvs_build_big_stack(ent->buf_vecs_.data(),
++                                                       static_cast<long>(n), ent->dim_);
++    if (nb == nullptr) {
++      ret = OB_ERR_VSAG_RETURN_ERROR;
++      LOG_WARN("[OBVSAG][cuVS] GPU CAGRA build failed during snapshot serialize",
++               K(ret), KP(key), K(n), K(ent->dim_));
++      return true;
++    }
++    ent->bridge_ = nb; ent->built_n_ = n; ent->ids_ = ent->buf_ids_;
++    built = true;
++  }
++  ObCuvsSnapshotFile graph;
++  ObCuvsSnapshotJob job{graph.path_, ent->bridge_.get(), static_cast<long>(n), ent->dim_, false, -1};
++  if (graph.file_ == nullptr || !ob_cuvs_snapshot_big_stack(job) ||
++      ::fseeko(graph.file_, 0, SEEK_END) != 0 || ::ftello(graph.file_) <= 0) {
++    ret = OB_ERR_VSAG_RETURN_ERROR;
++    return true;
++  }
++  const uint64_t graph_bytes = static_cast<uint64_t>(::ftello(graph.file_));
++  ::rewind(graph.file_);
++  const int64_t build_us = ObTimeUtility::current_time() - start_us;
++  const int32_t dim32 = ent->dim_;
++  const int32_t reserved = 0;
++  const int64_t n64 = static_cast<int64_t>(n);
++  if (!ob_cuvs_write(out, OB_CUVS_SNAPSHOT_MAGIC, sizeof(OB_CUVS_SNAPSHOT_MAGIC)) ||
++      !ob_cuvs_write(out, &graph_bytes, sizeof(graph_bytes)) ||
++      !ob_cuvs_write(out, &dim32, sizeof(dim32)) ||
++      !ob_cuvs_write(out, &reserved, sizeof(reserved)) ||
++      !ob_cuvs_write(out, &n64, sizeof(n64)) ||
++      !ob_cuvs_write(out, ent->buf_ids_.data(), n * sizeof(int64_t)) ||
++      !ob_cuvs_write(out, ent->buf_vecs_.data(), ent->buf_vecs_.size() * sizeof(float))) {
++    ret = OB_ERR_UNEXPECTED;
++    LOG_WARN("[OBVSAG][cuVS] failed to write snapshot stream", K(ret), KP(key), K(n));
++    return true;
++  }
++  std::vector<char> chunk(65536);
++  uint64_t remaining = graph_bytes;
++  while (remaining > 0) {
++    const size_t bytes = std::min<uint64_t>(remaining, chunk.size());
++    if (::fread(chunk.data(), 1, bytes, graph.file_) != bytes || !ob_cuvs_write(out, chunk.data(), bytes)) {
++      ret = OB_ERR_UNEXPECTED;
++      return true;
++    }
++    remaining -= bytes;
++  }
++  LOG_INFO("[OBVSAG][cuVS] serialized GPU CAGRA snapshot", KP(key), K(n), K(dim32),
++           K(built), K(build_us), K(graph_bytes));
++  return true;
++}
++
++// Consumes the stream after the magic. Registers and marks the handle for GPU search.
++static int ob_cuvs_deserialize(void *key, int expected_dim, std::istream &in) {
++  int ret = OB_SUCCESS;
++  uint64_t graph_bytes = 0;
++  int32_t dim32 = 0;
++  int32_t reserved = 0;
++  int64_t n64 = 0;
++  if (!ob_cuvs_read(in, &graph_bytes, sizeof(graph_bytes)) || !ob_cuvs_read(in, &dim32, sizeof(dim32)) ||
++      !ob_cuvs_read(in, &reserved, sizeof(reserved)) || !ob_cuvs_read(in, &n64, sizeof(n64))) {
++    ret = OB_ERR_UNEXPECTED;
++    LOG_WARN("[OBVSAG][cuVS] truncated snapshot header", K(ret), KP(key));
++  } else if (dim32 <= 0 || dim32 != expected_dim || reserved != 0 || n64 <= 0 ||
++             n64 > UINT32_MAX ||
++             static_cast<uint64_t>(n64) > std::numeric_limits<size_t>::max() / sizeof(float) / dim32 ||
++             graph_bytes == 0 || graph_bytes > static_cast<uint64_t>(INT64_MAX)) {
++    ret = OB_ERR_UNEXPECTED;
++    LOG_WARN("[OBVSAG][cuVS] invalid snapshot header", K(ret), KP(key), K(dim32),
++             K(expected_dim), K(n64));
++  } else {
++    const size_t n = static_cast<size_t>(n64);
++    ObCuvsEntry *ent = new ObCuvsEntry();
++    ent->dim_ = dim32;
++    ent->buf_ids_.resize(n);
++    ent->buf_vecs_.resize(n * static_cast<size_t>(dim32));
++    if (!ob_cuvs_read(in, ent->buf_ids_.data(), n * sizeof(int64_t)) ||
++        !ob_cuvs_read(in, ent->buf_vecs_.data(), ent->buf_vecs_.size() * sizeof(float))) {
++      delete ent;
++      ret = OB_ERR_UNEXPECTED;
++      LOG_WARN("[OBVSAG][cuVS] truncated snapshot payload", K(ret), KP(key), K(n64));
++    } else {
++      ObCuvsSnapshotFile graph;
++      std::vector<char> chunk(65536);
++      uint64_t remaining = graph_bytes;
++      while (graph.file_ != nullptr && remaining > 0) {
++        const size_t bytes = std::min<uint64_t>(remaining, chunk.size());
++        if (!ob_cuvs_read(in, chunk.data(), bytes) || ::fwrite(chunk.data(), 1, bytes, graph.file_) != bytes) {
++          break;
++        }
++        remaining -= bytes;
++      }
++      ObCuvsSnapshotJob job{graph.path_, nullptr, static_cast<long>(n), dim32, true, -1};
++      if (graph.file_ == nullptr || remaining != 0 || ::fflush(graph.file_) != 0 ||
++          !ob_cuvs_snapshot_big_stack(job)) {
++        delete ent;
++        ret = OB_ERR_VSAG_RETURN_ERROR;
++        LOG_WARN("[OBVSAG][cuVS] failed to load CAGRA graph from snapshot", K(ret), KP(key), K(n64));
++        return ret;
++      }
++      ent->bridge_ = ob_cuvs_wrap(job.handle_);
++      ent->built_n_ = n;
++      ent->ids_ = ent->buf_ids_;
++      {
++        std::lock_guard<std::mutex> guard(g_ob_cuvs_mu);
++        ObCuvsEntry *&slot = g_ob_cuvs_reg[key];
++        delete slot;
++        slot = ent;
++      }
++      {
++        std::lock_guard<std::mutex> guard(g_ob_cuvs_marked_mu);
++        g_ob_cuvs_marked.insert(key);
++      }
++      LOG_INFO("[OBVSAG][cuVS] deserialized GPU CAGRA snapshot", KP(key), K(n64), K(dim32),
++               K(graph_bytes));
++    }
++  }
++  return ret;
++}
+ }  // anonymous namespace
+ 
+ static int vsag_errcode2ob(vsag::ErrorType vsag_errcode)
+@@ -396,6 +627,7 @@ public:
+     LOG_INFO("[OBVSAG] after deconstruction, hnsw index", KP(allocator_), K(index_.use_count()), K(lbt()));
+   }
+   int build_index(const vsag::DatasetPtr &base);
++  int ensure_vsag_fallback();
+   int get_index_number();
+   int add_index(const vsag::DatasetPtr &incremental);
+   int cal_distance_by_id(const float *vector, const int64_t *ids, int64_t count,
+@@ -487,6 +719,13 @@ int HnswIndexHandler::build_index(const vsag::DatasetPtr &base)
+ 
+ int HnswIndexHandler::get_index_number()
+ {
++  if (ob_cuvs_marked(this) && !ob_cuvs_vsag_ready(this)) {
++    std::lock_guard<std::mutex> guard(g_ob_cuvs_mu);
++    auto it = g_ob_cuvs_reg.find(this);
++    if (it != g_ob_cuvs_reg.end()) {
++      return static_cast<int>(it->second->buf_ids_.size());
++    }
++  }
+   return index_->GetNumElements();
+ }
+ 
+@@ -502,6 +741,53 @@ int HnswIndexHandler::add_index(const vsag::DatasetPtr &incremental)
+   return ret;
+ }
+ 
++int HnswIndexHandler::ensure_vsag_fallback()
++{
++  int ret = OB_SUCCESS;
++  if (!ob_cuvs_marked(this) || ob_cuvs_vsag_ready(this)) {
++    return ret;
++  }
++  std::lock_guard<std::mutex> fallback_guard(g_ob_cuvs_fallback_mu);
++  if (ob_cuvs_vsag_ready(this)) {
++  } else {
++    std::vector<float> vectors;
++    std::vector<int64_t> ids;
++    int dim = 0;
++    {
++      std::lock_guard<std::mutex> guard(g_ob_cuvs_mu);
++      auto it = g_ob_cuvs_reg.find(this);
++      if (it == g_ob_cuvs_reg.end()) {
++        ret = OB_ERR_UNEXPECTED;
++      } else {
++        dim = it->second->dim_;
++        vectors = it->second->buf_vecs_;
++        ids = it->second->buf_ids_;
++      }
++    }
++    if (OB_SUCC(ret) && (dim <= 0 || vectors.empty() || ids.empty())) {
++      ret = OB_ERR_UNEXPECTED;
++    } else if (OB_SUCC(ret)) {
++      DatasetPtr dataset = vsag::Dataset::Make();
++      dataset->Dim(dim)
++          ->NumElements(static_cast<int64_t>(ids.size()))
++          ->Ids(ids.data())
++          ->Float32Vectors(vectors.data())
++          ->Owner(false);
++      if (OB_FAIL(build_index(dataset))) {
++      } else {
++        std::lock_guard<std::mutex> guard(g_ob_cuvs_mu);
++        auto it = g_ob_cuvs_reg.find(this);
++        if (it != g_ob_cuvs_reg.end()) {
++          it->second->vsag_ready_ = true;
++        }
++        LOG_INFO("[OBVSAG][cuVS] lazily built VSAG fallback",
++                 KP(this), K(dim), K(ids.size()));
++      }
++    }
++  }
++  return ret;
++}
++
+ int HnswIndexHandler::cal_distance_by_id(uint32_t len, uint32_t *dims, float *vals,
+                                          const int64_t *ids, int64_t count,
+                                          const float *&dist)
+@@ -562,6 +848,16 @@ int HnswIndexHandler::get_extra_info_by_ids(const int64_t *ids, int64_t count,
+ int HnswIndexHandler::get_vid_bound(int64_t &min_vid, int64_t &max_vid)
+ {
+   int ret = OB_SUCCESS;
++  if (ob_cuvs_marked(this) && !ob_cuvs_vsag_ready(this)) {
++    std::lock_guard<std::mutex> guard(g_ob_cuvs_mu);
++    auto it = g_ob_cuvs_reg.find(this);
++    if (it != g_ob_cuvs_reg.end() && !it->second->buf_ids_.empty()) {
++      const std::vector<int64_t> &vids = it->second->buf_ids_;
++      min_vid = *std::min_element(vids.begin(), vids.end());
++      max_vid = *std::max_element(vids.begin(), vids.end());
++    }
++    return ret;
++  }
+   int64_t element_cnt = index_->GetNumElements();
+   if (element_cnt == 0) {
+   } else {
+@@ -604,7 +900,8 @@ uint64_t HnswIndexHandler::estimate_memory(const uint64_t row_count, const bool
+ int HnswIndexHandler::immutable_optimize()
+ {
+   int ret = OB_SUCCESS;
+-  if (index_type_ == IPIVF_TYPE) {
++  if (ob_cuvs_marked(this) && !ob_cuvs_vsag_ready(this)) {
++  } else if (index_type_ == IPIVF_TYPE) {
+     // TODO(ningxin.ning): support SetImmutable for sparse vector index
+   } else {
+     tl::expected<void, Error> res = index_->SetImmutable();
+@@ -1246,11 +1543,11 @@ int build_index(VectorIndexPtr &index_handler, float *vector_list,
+     if (extra_infos != nullptr) {
+       dataset->ExtraInfos(extra_infos);
+     }
+-    if (OB_FAIL(hnsw->build_index(dataset))) {
+-    } else if (ob_cuvs_marked(index_handler)) {
++    if (ob_cuvs_marked(index_handler)) {
+       ob_cuvs_register(index_handler, vector_list, ids, dim, size);
+-      LOG_INFO("[OBVSAG][cuVS] built GPU CAGRA index alongside VSAG",
++      LOG_INFO("[OBVSAG][cuVS] built GPU CAGRA index without duplicate VSAG",
+                KP(index_handler), K(dim), K(size));
++    } else if (OB_FAIL(hnsw->build_index(dataset))) {
+     }
+   }
+   return ret;
+@@ -1296,6 +1593,9 @@ int add_index(VectorIndexPtr &index_handler, float *vector,
+   if (ob_cuvs_marked(index_handler) && index_handler != nullptr &&
+       strcmp(static_cast<HnswIndexHandler *>(index_handler)->get_metric(), "l2") == 0) {
+     ob_cuvs_add(index_handler, vector, ids, dim, size);
++    if (!ob_cuvs_vsag_ready(index_handler)) {
++      return OB_SUCCESS;
++    }
+   }
+   if (index_handler == nullptr || vector == nullptr || ids == nullptr) {
+     ret = OB_INVALID_ARGUMENT;
+@@ -1396,7 +1696,8 @@ int cal_distance_by_id(VectorIndexPtr &index_handler,
+     LOG_WARN("[OBVSAG] null pointer addr", K(index_handler));
+   } else {
+     HnswIndexHandler *hnsw = static_cast<HnswIndexHandler *>(index_handler);
+-    if (OB_FAIL(hnsw->cal_distance_by_id(vector, ids, count, distances))) {
++    if (OB_FAIL(hnsw->ensure_vsag_fallback())) {
++    } else if (OB_FAIL(hnsw->cal_distance_by_id(vector, ids, count, distances))) {
+     }
+   }
+   return ret;
+@@ -1459,6 +1760,9 @@ int knn_search(VectorIndexPtr &index_handler, float *query_vector,
+                              query_vector, dim, topk, dist, ids, result_size, invalid, reverse_filter)) {
+         return OB_SUCCESS;
+       }
++      if (OB_FAIL(cuvs_hnsw->ensure_vsag_fallback())) {
++        return ret;
++      }
+     }
+     FilterInterface *bitmap = static_cast<FilterInterface *>(invalid);
+     HnswIndexHandler *hnsw = static_cast<HnswIndexHandler *>(index_handler);
+@@ -1508,6 +1812,9 @@ int knn_search(VectorIndexPtr &index_handler, float *query_vector,
+                              query_vector, dim, topk, dist, ids, result_size, invalid, reverse_filter)) {
+         return OB_SUCCESS;
+       }
++      if (OB_FAIL(cuvs_hnsw->ensure_vsag_fallback())) {
++        return ret;
++      }
+     }
+     FilterInterface *bitmap = static_cast<FilterInterface *>(invalid);
+     HnswIndexHandler *hnsw = static_cast<HnswIndexHandler *>(index_handler);
+@@ -1581,6 +1888,12 @@ int fserialize(VectorIndexPtr &index_handler, std::ostream &out_stream)
+     LOG_WARN("[OBVSAG] null pointer addr", K(index_handler));
+   } else {
+     HnswIndexHandler *hnsw = static_cast<HnswIndexHandler *>(index_handler);
++    if (ob_cuvs_marked(index_handler) && ob_cuvs_serialize(index_handler, out_stream, ret)) {
++      return ret;
++    }
++    if (OB_FAIL(hnsw->ensure_vsag_fallback())) {
++      return ret;
++    }
+     tl::expected<void, Error> bs = hnsw->get_index()->Serialize(out_stream);
+     if (bs.has_value()) {
+       LOG_INFO("[OBVSAG] serialize index success");
+@@ -1620,6 +1933,23 @@ int fdeserialize(VectorIndexPtr &index_handler,
+     float doc_prune_ratio = hnsw->get_doc_prune_ratio();
+     int window_size = hnsw->get_window_size();
+ 
++    if (((IndexType)index_type == IndexType::HNSW_TYPE ||
++         (IndexType)index_type == IndexType::HGRAPH_TYPE) &&
++        in_stream.rdbuf() != nullptr &&
++        in_stream.rdbuf()->in_avail() >= static_cast<std::streamsize>(sizeof(OB_CUVS_SNAPSHOT_MAGIC))) {
++      char magic[sizeof(OB_CUVS_SNAPSHOT_MAGIC)] = {0};
++      std::streambuf *sb = in_stream.rdbuf();
++      const std::streamsize got = sb->sgetn(magic, sizeof(magic));
++      if (got == static_cast<std::streamsize>(sizeof(magic)) &&
++          0 == memcmp(magic, OB_CUVS_SNAPSHOT_MAGIC, sizeof(magic))) {
++        return ob_cuvs_deserialize(index_handler, dim, in_stream);
++      }
++      if (sb->pubseekoff(-got, std::ios_base::cur, std::ios_base::in) == std::streampos(-1)) {
++        ret = OB_ERR_UNEXPECTED;
++        LOG_WARN("[OBVSAG] cannot rewind snapshot stream", K(ret), K(got));
++        return ret;
++      }
++    }
+     char result_param_str[1024] = {0};
+     if ((IndexType)index_type == IndexType::IPIVF_TYPE) {
+       if (OB_FAIL(construct_vsag_sindi_create_param(uint8_t(index_type),
+@@ -1696,7 +2026,8 @@ int get_extra_info_by_ids(VectorIndexPtr &index_handler,
+     LOG_WARN("[OBVSAG] null pointer addr", K(index_handler));
+   } else {
+     HnswIndexHandler *hnsw = static_cast<HnswIndexHandler *>(index_handler);
+-    if (OB_FAIL(hnsw->get_extra_info_by_ids(ids, count, extra_infos))) {
++    if (OB_FAIL(hnsw->ensure_vsag_fallback())) {
++    } else if (OB_FAIL(hnsw->get_extra_info_by_ids(ids, count, extra_infos))) {
+     }
+   }
+   return ret;
+diff --git a/src/observer/vector_index/ob_plugin_vector_index_adaptor.cpp b/src/observer/vector_index/ob_plugin_vector_index_adaptor.cpp
+index 8d8b33fcf..e9b153d3b 100644
+--- a/src/observer/vector_index/ob_plugin_vector_index_adaptor.cpp
++++ b/src/observer/vector_index/ob_plugin_vector_index_adaptor.cpp
+@@ -3310,7 +3310,13 @@ int ObPluginVectorIndexAdaptor::renew_single_snap_index(bool mem_saving_mode)
+ {
+   int ret = OB_SUCCESS;
+   ObVectorIndexAlgorithmType index_type = get_snap_index_type();
+-  if (mem_saving_mode) {
++  const ObVectorIndexParam *param = static_cast<const ObVectorIndexParam *>(algo_data_);
++  const bool keep_gpu_snapshot = param != nullptr
++      && param->lib_ == ObVectorIndexAlgorithmLib::VIAL_CUVS
++      && param->dist_algorithm_ == ObVectorIndexDistAlgorithm::VIDA_L2
++      && (param->type_ == ObVectorIndexAlgorithmType::VIAT_HNSW
++          || param->type_ == ObVectorIndexAlgorithmType::VIAT_HGRAPH);
++  if (mem_saving_mode && !keep_gpu_snapshot) {
+     ObString invalid_prefix("renew");
+     if (OB_ISNULL(snap_data_)) {
+       ret = OB_ERR_UNEXPECTED;
+diff --git a/tools/hipvs_bridge/seekdb_cuvs_bridge.c b/tools/hipvs_bridge/seekdb_cuvs_bridge.c
+index 11a348c95..88694f339 100644
+--- a/tools/hipvs_bridge/seekdb_cuvs_bridge.c
++++ b/tools/hipvs_bridge/seekdb_cuvs_bridge.c
+@@ -32,6 +32,10 @@ void* seekdb_cuvs_build(const float* base, long n, long dim)
+   dset.dl_tensor.shape = ds; dset.dl_tensor.strides = 0; dset.dl_tensor.byte_offset = 0;
+ 
+   if (cuvsCagraIndexParamsCreate(&h->ip) != CUVS_SUCCESS) goto fail_res;
++  h->ip->build_algo = NN_DESCENT;
++  h->ip->graph_degree = 128;
++  h->ip->intermediate_graph_degree = 256;
++  h->ip->nn_descent_niter = 100;
+   if (cuvsCagraIndexCreate(&h->idx)      != CUVS_SUCCESS) goto fail_ip;
+   if (cuvsCagraBuild(h->res, h->ip, &dset, h->idx) != CUVS_SUCCESS) goto fail_idx;
+   h->n = n; h->dim = dim;
+@@ -63,6 +67,12 @@ int seekdb_cuvs_search(void* handle, const float* query, long nq, long topk,
+     nt=qt; nt.dl_tensor.data=nd; nt.dl_tensor.dtype.code=kDLUInt; nt.dl_tensor.shape=nsh;
+     dt=qt; dt.dl_tensor.data=dd; dt.dl_tensor.dtype.code=kDLFloat; dt.dl_tensor.shape=dsh;
+     if (cuvsCagraSearchParamsCreate(&sp) != CUVS_SUCCESS) { rc=14; goto done; }
++    {
++      size_t required_itopk = (size_t)topk * 4;
++      if (required_itopk < 512) required_itopk = 512;
++      if (sp->itopk_size < required_itopk) sp->itopk_size = required_itopk;
++      sp->search_width = 4;
++    }
+     cuvsFilter f; f.type=NO_FILTER; f.addr=(uintptr_t)0;
+     if (cuvsCagraSearch(h->res, sp, h->idx, &qt, &nt, &dt, f) != CUVS_SUCCESS) { rc=15; goto done; }
+     if (cudaMemcpy(out_ids, nd, sizeof(unsigned)*nq*topk, cudaMemcpyDefault) != cudaSuccess) { rc=16; goto done; }
+@@ -87,6 +97,52 @@ void seekdb_cuvs_free(void* handle)
+   free(h);
+ }
+ 
++int seekdb_cuvs_serialize(void* handle, const char* filename)
++{
++  sk_cuvs_index* index = (sk_cuvs_index*)handle;
++  if (!index || !filename) return 1;
++  if (cuvsCagraSerialize(index->res, filename, index->idx, true) != CUVS_SUCCESS) {
++    fprintf(stderr, "[seekdb_cuvs] serialize failed: %s\n", cuvsGetLastErrorText());
++    return 1;
++  }
++  return 0;
++}
++
++void* seekdb_cuvs_deserialize(const char* filename, long n, long dim)
++{
++  if (!filename || n <= 0 || dim <= 0) return NULL;
++  sk_cuvs_index* index = (sk_cuvs_index*)calloc(1, sizeof(*index));
++  if (!index) return NULL;
++  if (cuvsResourcesCreate(&index->res) != CUVS_SUCCESS) goto fail;
++  if (cuvsCagraIndexParamsCreate(&index->ip) != CUVS_SUCCESS) goto fail_res;
++  if (cuvsCagraIndexCreate(&index->idx) != CUVS_SUCCESS) goto fail_ip;
++  if (cuvsCagraDeserialize(index->res, filename, index->idx) != CUVS_SUCCESS) goto fail_idx;
++  {
++    int64_t actual_n = 0;
++    int64_t actual_dim = 0;
++    if (cuvsCagraIndexGetSize(index->idx, &actual_n) != CUVS_SUCCESS ||
++        cuvsCagraIndexGetDims(index->idx, &actual_dim) != CUVS_SUCCESS ||
++        actual_n != n || actual_dim != dim) {
++      fprintf(stderr, "[seekdb_cuvs] snapshot shape mismatch: %ld x %ld, expected %ld x %ld\n",
++              (long)actual_n, (long)actual_dim, n, dim);
++      goto fail_idx;
++    }
++  }
++  index->n = n;
++  index->dim = dim;
++  return index;
++fail_idx:
++  cuvsCagraIndexDestroy(index->idx);
++fail_ip:
++  cuvsCagraIndexParamsDestroy(index->ip);
++fail_res:
++  cuvsResourcesDestroy(index->res);
++fail:
++  fprintf(stderr, "[seekdb_cuvs] deserialize failed: %s\n", cuvsGetLastErrorText());
++  free(index);
++  return NULL;
++}
++
+ int seekdb_cuvs_cagra_knn(const float* base, long n, long dim,
+                           const float* query, long nq, long topk,
+                           unsigned int* out_ids)
+diff --git a/tools/hipvs_bridge/seekdb_cuvs_bridge.h b/tools/hipvs_bridge/seekdb_cuvs_bridge.h
+index 233f4f374..e8a77694b 100644
+--- a/tools/hipvs_bridge/seekdb_cuvs_bridge.h
++++ b/tools/hipvs_bridge/seekdb_cuvs_bridge.h
+@@ -23,6 +23,8 @@ void* seekdb_cuvs_build(const float* base, long n, long dim);
+ int   seekdb_cuvs_search(void* handle, const float* query, long nq, long topk,
+                          unsigned int* out_ids, float* out_dist);
+ void  seekdb_cuvs_free(void* handle);
++int seekdb_cuvs_serialize(void* handle, const char* filename);
++void* seekdb_cuvs_deserialize(const char* filename, long n, long dim);
+ #ifdef __cplusplus
+ }
+ #endif
+diff --git a/tools/hipvs_bridge/test_persistence.cpp b/tools/hipvs_bridge/test_persistence.cpp
+new file mode 100644
+index 000000000..2f530b91e
+--- /dev/null
++++ b/tools/hipvs_bridge/test_persistence.cpp
+@@ -0,0 +1,37 @@
++#include "seekdb_cuvs_bridge.h"
++#include <cmath>
++#include <cstdio>
++#include <cstring>
++#include <vector>
++
++int main(int argc, char **argv)
++{
++  if (argc != 3) return 2;
++  const long count = 10000;
++  const long dimension = 32;
++  std::vector<float> vectors(count * dimension);
++  for (long row = 0; row < count; ++row) {
++    for (long column = 0; column < dimension; ++column) {
++      vectors[row * dimension + column] = std::sin(float(row * 31 + column * 17));
++    }
++  }
++  void *index = nullptr;
++  if (std::strcmp(argv[1], "write") == 0) {
++    index = seekdb_cuvs_build(vectors.data(), count, dimension);
++    if (!index || seekdb_cuvs_serialize(index, argv[2]) != 0) return 3;
++  } else {
++    void *invalid = seekdb_cuvs_deserialize(argv[2], count - 1, dimension);
++    if (invalid) { seekdb_cuvs_free(invalid); return 6; }
++    invalid = seekdb_cuvs_deserialize(argv[2], count, dimension + 1);
++    if (invalid) { seekdb_cuvs_free(invalid); return 7; }
++    index = seekdb_cuvs_deserialize(argv[2], count, dimension);
++    if (!index) return 4;
++  }
++  unsigned int ids[10];
++  float distances[10];
++  int result = seekdb_cuvs_search(index, vectors.data(), 1, 10, ids, distances);
++  seekdb_cuvs_free(index);
++  if (result != 0 || ids[0] != 0 || std::fabs(distances[0]) > 0.0001f) return 5;
++  std::printf("%s: n=%ld top1=%u distance=%g\n", argv[1], count, ids[0], distances[0]);
++  return 0;
++}

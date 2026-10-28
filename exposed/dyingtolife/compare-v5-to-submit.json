@@ -1,0 +1,473 @@
+{
+  "url": "https://api.github.com/repos/dyingtolife/seekdb/compare/634888d9b0...bf0074456f",
+  "html_url": "https://github.com/dyingtolife/seekdb/compare/634888d9b0...bf0074456f",
+  "permalink_url": "https://github.com/dyingtolife/seekdb/compare/dyingtolife:634888d...dyingtolife:bf00744",
+  "diff_url": "https://github.com/dyingtolife/seekdb/compare/634888d9b0...bf0074456f.diff",
+  "patch_url": "https://github.com/dyingtolife/seekdb/compare/634888d9b0...bf0074456f.patch",
+  "base_commit": {
+    "sha": "634888d9b037153fa143d2c913ba4b25503e1d62",
+    "node_id": "C_kwDOVaYRGdoAKDYzNDg4OGQ5YjAzNzE1M2ZhMTQzZDJjOTEzYmE0YjI1NTAzZTFkNjI",
+    "commit": {
+      "author": {
+        "name": "zihaomu",
+        "email": "zmu@amd.com",
+        "date": "2026-10-28T02:21:58Z"
+      },
+      "committer": {
+        "name": "zihaomu",
+        "email": "zmu@amd.com",
+        "date": "2026-10-28T02:21:58Z"
+      },
+      "message": "test(vector): match OBCUVS02 snapshot log in DDL persistence smoke\n\nCo-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>",
+      "tree": {
+        "sha": "24765c4efb1db217742e462f65b3d2695277157f",
+        "url": "https://api.github.com/repos/dyingtolife/seekdb/git/trees/24765c4efb1db217742e462f65b3d2695277157f"
+      },
+      "url": "https://api.github.com/repos/dyingtolife/seekdb/git/commits/634888d9b037153fa143d2c913ba4b25503e1d62",
+      "comment_count": 0,
+      "verification": {
+        "verified": false,
+        "reason": "unsigned",
+        "signature": null,
+        "payload": null,
+        "verified_at": null
+      }
+    },
+    "url": "https://api.github.com/repos/dyingtolife/seekdb/commits/634888d9b037153fa143d2c913ba4b25503e1d62",
+    "html_url": "https://github.com/dyingtolife/seekdb/commit/634888d9b037153fa143d2c913ba4b25503e1d62",
+    "comments_url": "https://api.github.com/repos/dyingtolife/seekdb/commits/634888d9b037153fa143d2c913ba4b25503e1d62/comments",
+    "author": {
+      "login": "zihaomu",
+      "id": 16487352,
+      "node_id": "MDQ6VXNlcjE2NDg3MzUy",
+      "avatar_url": "https://avatars.githubusercontent.com/u/16487352?v=4",
+      "gravatar_id": "",
+      "url": "https://api.github.com/users/zihaomu",
+      "html_url": "https://github.com/zihaomu",
+      "followers_url": "https://api.github.com/users/zihaomu/followers",
+      "following_url": "https://api.github.com/users/zihaomu/following{/other_user}",
+      "gists_url": "https://api.github.com/users/zihaomu/gists{/gist_id}",
+      "starred_url": "https://api.github.com/users/zihaomu/starred{/owner}{/repo}",
+      "subscriptions_url": "https://api.github.com/users/zihaomu/subscriptions",
+      "organizations_url": "https://api.github.com/users/zihaomu/orgs",
+      "repos_url": "https://api.github.com/users/zihaomu/repos",
+      "events_url": "https://api.github.com/users/zihaomu/events{/privacy}",
+      "received_events_url": "https://api.github.com/users/zihaomu/received_events",
+      "type": "User",
+      "user_view_type": "public",
+      "site_admin": false
+    },
+    "committer": {
+      "login": "zihaomu",
+      "id": 16487352,
+      "node_id": "MDQ6VXNlcjE2NDg3MzUy",
+      "avatar_url": "https://avatars.githubusercontent.com/u/16487352?v=4",
+      "gravatar_id": "",
+      "url": "https://api.github.com/users/zihaomu",
+      "html_url": "https://github.com/zihaomu",
+      "followers_url": "https://api.github.com/users/zihaomu/followers",
+      "following_url": "https://api.github.com/users/zihaomu/following{/other_user}",
+      "gists_url": "https://api.github.com/users/zihaomu/gists{/gist_id}",
+      "starred_url": "https://api.github.com/users/zihaomu/starred{/owner}{/repo}",
+      "subscriptions_url": "https://api.github.com/users/zihaomu/subscriptions",
+      "organizations_url": "https://api.github.com/users/zihaomu/orgs",
+      "repos_url": "https://api.github.com/users/zihaomu/repos",
+      "events_url": "https://api.github.com/users/zihaomu/events{/privacy}",
+      "received_events_url": "https://api.github.com/users/zihaomu/received_events",
+      "type": "User",
+      "user_view_type": "public",
+      "site_admin": false
+    },
+    "parents": [
+      {
+        "sha": "e0bba2c3254f9862fe38fc2053c5146ccfe2cdc0",
+        "url": "https://api.github.com/repos/dyingtolife/seekdb/commits/e0bba2c3254f9862fe38fc2053c5146ccfe2cdc0",
+        "html_url": "https://github.com/dyingtolife/seekdb/commit/e0bba2c3254f9862fe38fc2053c5146ccfe2cdc0"
+      }
+    ]
+  },
+  "merge_base_commit": {
+    "sha": "634888d9b037153fa143d2c913ba4b25503e1d62",
+    "node_id": "C_kwDOVaYRGdoAKDYzNDg4OGQ5YjAzNzE1M2ZhMTQzZDJjOTEzYmE0YjI1NTAzZTFkNjI",
+    "commit": {
+      "author": {
+        "name": "zihaomu",
+        "email": "zmu@amd.com",
+        "date": "2026-10-28T02:21:58Z"
+      },
+      "committer": {
+        "name": "zihaomu",
+        "email": "zmu@amd.com",
+        "date": "2026-10-28T02:21:58Z"
+      },
+      "message": "test(vector): match OBCUVS02 snapshot log in DDL persistence smoke\n\nCo-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>",
+      "tree": {
+        "sha": "24765c4efb1db217742e462f65b3d2695277157f",
+        "url": "https://api.github.com/repos/dyingtolife/seekdb/git/trees/24765c4efb1db217742e462f65b3d2695277157f"
+      },
+      "url": "https://api.github.com/repos/dyingtolife/seekdb/git/commits/634888d9b037153fa143d2c913ba4b25503e1d62",
+      "comment_count": 0,
+      "verification": {
+        "verified": false,
+        "reason": "unsigned",
+        "signature": null,
+        "payload": null,
+        "verified_at": null
+      }
+    },
+    "url": "https://api.github.com/repos/dyingtolife/seekdb/commits/634888d9b037153fa143d2c913ba4b25503e1d62",
+    "html_url": "https://github.com/dyingtolife/seekdb/commit/634888d9b037153fa143d2c913ba4b25503e1d62",
+    "comments_url": "https://api.github.com/repos/dyingtolife/seekdb/commits/634888d9b037153fa143d2c913ba4b25503e1d62/comments",
+    "author": {
+      "login": "zihaomu",
+      "id": 16487352,
+      "node_id": "MDQ6VXNlcjE2NDg3MzUy",
+      "avatar_url": "https://avatars.githubusercontent.com/u/16487352?v=4",
+      "gravatar_id": "",
+      "url": "https://api.github.com/users/zihaomu",
+      "html_url": "https://github.com/zihaomu",
+      "followers_url": "https://api.github.com/users/zihaomu/followers",
+      "following_url": "https://api.github.com/users/zihaomu/following{/other_user}",
+      "gists_url": "https://api.github.com/users/zihaomu/gists{/gist_id}",
+      "starred_url": "https://api.github.com/users/zihaomu/starred{/owner}{/repo}",
+      "subscriptions_url": "https://api.github.com/users/zihaomu/subscriptions",
+      "organizations_url": "https://api.github.com/users/zihaomu/orgs",
+      "repos_url": "https://api.github.com/users/zihaomu/repos",
+      "events_url": "https://api.github.com/users/zihaomu/events{/privacy}",
+      "received_events_url": "https://api.github.com/users/zihaomu/received_events",
+      "type": "User",
+      "user_view_type": "public",
+      "site_admin": false
+    },
+    "committer": {
+      "login": "zihaomu",
+      "id": 16487352,
+      "node_id": "MDQ6VXNlcjE2NDg3MzUy",
+      "avatar_url": "https://avatars.githubusercontent.com/u/16487352?v=4",
+      "gravatar_id": "",
+      "url": "https://api.github.com/users/zihaomu",
+      "html_url": "https://github.com/zihaomu",
+      "followers_url": "https://api.github.com/users/zihaomu/followers",
+      "following_url": "https://api.github.com/users/zihaomu/following{/other_user}",
+      "gists_url": "https://api.github.com/users/zihaomu/gists{/gist_id}",
+      "starred_url": "https://api.github.com/users/zihaomu/starred{/owner}{/repo}",
+      "subscriptions_url": "https://api.github.com/users/zihaomu/subscriptions",
+      "organizations_url": "https://api.github.com/users/zihaomu/orgs",
+      "repos_url": "https://api.github.com/users/zihaomu/repos",
+      "events_url": "https://api.github.com/users/zihaomu/events{/privacy}",
+      "received_events_url": "https://api.github.com/users/zihaomu/received_events",
+      "type": "User",
+      "user_view_type": "public",
+      "site_admin": false
+    },
+    "parents": [
+      {
+        "sha": "e0bba2c3254f9862fe38fc2053c5146ccfe2cdc0",
+        "url": "https://api.github.com/repos/dyingtolife/seekdb/commits/e0bba2c3254f9862fe38fc2053c5146ccfe2cdc0",
+        "html_url": "https://github.com/dyingtolife/seekdb/commit/e0bba2c3254f9862fe38fc2053c5146ccfe2cdc0"
+      }
+    ]
+  },
+  "status": "ahead",
+  "ahead_by": 3,
+  "behind_by": 0,
+  "total_commits": 3,
+  "commits": [
+    {
+      "sha": "6bd55ba6f95cb970eeb9f94348f3ad307759de06",
+      "node_id": "C_kwDOVaYRGdoAKDZiZDU1YmE2Zjk1Y2I5NzBlZWI5Zjk0MzQ4ZjNhZDMwNzc1OWRlMDY",
+      "commit": {
+        "author": {
+          "name": "dyingtolife",
+          "email": "dyingtolife@users.noreply.github.com",
+          "date": "2026-10-28T10:51:53Z"
+        },
+        "committer": {
+          "name": "dyingtolife",
+          "email": "dyingtolife@users.noreply.github.com",
+          "date": "2026-10-28T10:51:53Z"
+        },
+        "message": "perf(cuvs): reuse per-index device scratch in the hipVS bridge",
+        "tree": {
+          "sha": "b925d6b416b44af8519e8b59a6d2a42111f97964",
+          "url": "https://api.github.com/repos/dyingtolife/seekdb/git/trees/b925d6b416b44af8519e8b59a6d2a42111f97964"
+        },
+        "url": "https://api.github.com/repos/dyingtolife/seekdb/git/commits/6bd55ba6f95cb970eeb9f94348f3ad307759de06",
+        "comment_count": 0,
+        "verification": {
+          "verified": false,
+          "reason": "unsigned",
+          "signature": null,
+          "payload": null,
+          "verified_at": null
+        }
+      },
+      "url": "https://api.github.com/repos/dyingtolife/seekdb/commits/6bd55ba6f95cb970eeb9f94348f3ad307759de06",
+      "html_url": "https://github.com/dyingtolife/seekdb/commit/6bd55ba6f95cb970eeb9f94348f3ad307759de06",
+      "comments_url": "https://api.github.com/repos/dyingtolife/seekdb/commits/6bd55ba6f95cb970eeb9f94348f3ad307759de06/comments",
+      "author": {
+        "login": "dyingtolife",
+        "id": 186171897,
+        "node_id": "U_kgDOCxjB-Q",
+        "avatar_url": "https://avatars.githubusercontent.com/u/186171897?v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/dyingtolife",
+        "html_url": "https://github.com/dyingtolife",
+        "followers_url": "https://api.github.com/users/dyingtolife/followers",
+        "following_url": "https://api.github.com/users/dyingtolife/following{/other_user}",
+        "gists_url": "https://api.github.com/users/dyingtolife/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/dyingtolife/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/dyingtolife/subscriptions",
+        "organizations_url": "https://api.github.com/users/dyingtolife/orgs",
+        "repos_url": "https://api.github.com/users/dyingtolife/repos",
+        "events_url": "https://api.github.com/users/dyingtolife/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/dyingtolife/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "committer": {
+        "login": "dyingtolife",
+        "id": 186171897,
+        "node_id": "U_kgDOCxjB-Q",
+        "avatar_url": "https://avatars.githubusercontent.com/u/186171897?v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/dyingtolife",
+        "html_url": "https://github.com/dyingtolife",
+        "followers_url": "https://api.github.com/users/dyingtolife/followers",
+        "following_url": "https://api.github.com/users/dyingtolife/following{/other_user}",
+        "gists_url": "https://api.github.com/users/dyingtolife/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/dyingtolife/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/dyingtolife/subscriptions",
+        "organizations_url": "https://api.github.com/users/dyingtolife/orgs",
+        "repos_url": "https://api.github.com/users/dyingtolife/repos",
+        "events_url": "https://api.github.com/users/dyingtolife/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/dyingtolife/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "parents": [
+        {
+          "sha": "634888d9b037153fa143d2c913ba4b25503e1d62",
+          "url": "https://api.github.com/repos/dyingtolife/seekdb/commits/634888d9b037153fa143d2c913ba4b25503e1d62",
+          "html_url": "https://github.com/dyingtolife/seekdb/commit/634888d9b037153fa143d2c913ba4b25503e1d62"
+        }
+      ]
+    },
+    {
+      "sha": "12aab9b773de6a1f2ff44ee9caba4ef83e24a7b5",
+      "node_id": "C_kwDOVaYRGdoAKDEyYWFiOWI3NzNkZTZhMWYyZmY0NGVlOWNhYmE0ZWY4M2UyNGE3YjU",
+      "commit": {
+        "author": {
+          "name": "dyingtolife",
+          "email": "dyingtolife@users.noreply.github.com",
+          "date": "2026-10-28T10:51:53Z"
+        },
+        "committer": {
+          "name": "dyingtolife",
+          "email": "dyingtolife@users.noreply.github.com",
+          "date": "2026-10-28T10:51:53Z"
+        },
+        "message": "perf(cuvs): overlap the CAGRA build with the CPU index load",
+        "tree": {
+          "sha": "7c1008e3f55095c3c71d3b0394138a108fa41e2d",
+          "url": "https://api.github.com/repos/dyingtolife/seekdb/git/trees/7c1008e3f55095c3c71d3b0394138a108fa41e2d"
+        },
+        "url": "https://api.github.com/repos/dyingtolife/seekdb/git/commits/12aab9b773de6a1f2ff44ee9caba4ef83e24a7b5",
+        "comment_count": 0,
+        "verification": {
+          "verified": false,
+          "reason": "unsigned",
+          "signature": null,
+          "payload": null,
+          "verified_at": null
+        }
+      },
+      "url": "https://api.github.com/repos/dyingtolife/seekdb/commits/12aab9b773de6a1f2ff44ee9caba4ef83e24a7b5",
+      "html_url": "https://github.com/dyingtolife/seekdb/commit/12aab9b773de6a1f2ff44ee9caba4ef83e24a7b5",
+      "comments_url": "https://api.github.com/repos/dyingtolife/seekdb/commits/12aab9b773de6a1f2ff44ee9caba4ef83e24a7b5/comments",
+      "author": {
+        "login": "dyingtolife",
+        "id": 186171897,
+        "node_id": "U_kgDOCxjB-Q",
+        "avatar_url": "https://avatars.githubusercontent.com/u/186171897?v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/dyingtolife",
+        "html_url": "https://github.com/dyingtolife",
+        "followers_url": "https://api.github.com/users/dyingtolife/followers",
+        "following_url": "https://api.github.com/users/dyingtolife/following{/other_user}",
+        "gists_url": "https://api.github.com/users/dyingtolife/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/dyingtolife/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/dyingtolife/subscriptions",
+        "organizations_url": "https://api.github.com/users/dyingtolife/orgs",
+        "repos_url": "https://api.github.com/users/dyingtolife/repos",
+        "events_url": "https://api.github.com/users/dyingtolife/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/dyingtolife/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "committer": {
+        "login": "dyingtolife",
+        "id": 186171897,
+        "node_id": "U_kgDOCxjB-Q",
+        "avatar_url": "https://avatars.githubusercontent.com/u/186171897?v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/dyingtolife",
+        "html_url": "https://github.com/dyingtolife",
+        "followers_url": "https://api.github.com/users/dyingtolife/followers",
+        "following_url": "https://api.github.com/users/dyingtolife/following{/other_user}",
+        "gists_url": "https://api.github.com/users/dyingtolife/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/dyingtolife/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/dyingtolife/subscriptions",
+        "organizations_url": "https://api.github.com/users/dyingtolife/orgs",
+        "repos_url": "https://api.github.com/users/dyingtolife/repos",
+        "events_url": "https://api.github.com/users/dyingtolife/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/dyingtolife/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "parents": [
+        {
+          "sha": "6bd55ba6f95cb970eeb9f94348f3ad307759de06",
+          "url": "https://api.github.com/repos/dyingtolife/seekdb/commits/6bd55ba6f95cb970eeb9f94348f3ad307759de06",
+          "html_url": "https://github.com/dyingtolife/seekdb/commit/6bd55ba6f95cb970eeb9f94348f3ad307759de06"
+        }
+      ]
+    },
+    {
+      "sha": "bf0074456f4858f0f08d22e7d234ae67fbbb431d",
+      "node_id": "C_kwDOVaYRGdoAKGJmMDA3NDQ1NmY0ODU4ZjBmMDhkMjJlN2QyMzRhZTY3ZmJiYjQzMWQ",
+      "commit": {
+        "author": {
+          "name": "dyingtolife",
+          "email": "dyingtolife@users.noreply.github.com",
+          "date": "2026-10-28T10:52:07Z"
+        },
+        "committer": {
+          "name": "dyingtolife",
+          "email": "dyingtolife@users.noreply.github.com",
+          "date": "2026-10-28T10:52:07Z"
+        },
+        "message": "docs(cuvs): document the contest optimisation and its runtime switches",
+        "tree": {
+          "sha": "946235ab1189eb046797b04c72c6b8c6cc36974d",
+          "url": "https://api.github.com/repos/dyingtolife/seekdb/git/trees/946235ab1189eb046797b04c72c6b8c6cc36974d"
+        },
+        "url": "https://api.github.com/repos/dyingtolife/seekdb/git/commits/bf0074456f4858f0f08d22e7d234ae67fbbb431d",
+        "comment_count": 0,
+        "verification": {
+          "verified": false,
+          "reason": "unsigned",
+          "signature": null,
+          "payload": null,
+          "verified_at": null
+        }
+      },
+      "url": "https://api.github.com/repos/dyingtolife/seekdb/commits/bf0074456f4858f0f08d22e7d234ae67fbbb431d",
+      "html_url": "https://github.com/dyingtolife/seekdb/commit/bf0074456f4858f0f08d22e7d234ae67fbbb431d",
+      "comments_url": "https://api.github.com/repos/dyingtolife/seekdb/commits/bf0074456f4858f0f08d22e7d234ae67fbbb431d/comments",
+      "author": {
+        "login": "dyingtolife",
+        "id": 186171897,
+        "node_id": "U_kgDOCxjB-Q",
+        "avatar_url": "https://avatars.githubusercontent.com/u/186171897?v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/dyingtolife",
+        "html_url": "https://github.com/dyingtolife",
+        "followers_url": "https://api.github.com/users/dyingtolife/followers",
+        "following_url": "https://api.github.com/users/dyingtolife/following{/other_user}",
+        "gists_url": "https://api.github.com/users/dyingtolife/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/dyingtolife/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/dyingtolife/subscriptions",
+        "organizations_url": "https://api.github.com/users/dyingtolife/orgs",
+        "repos_url": "https://api.github.com/users/dyingtolife/repos",
+        "events_url": "https://api.github.com/users/dyingtolife/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/dyingtolife/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "committer": {
+        "login": "dyingtolife",
+        "id": 186171897,
+        "node_id": "U_kgDOCxjB-Q",
+        "avatar_url": "https://avatars.githubusercontent.com/u/186171897?v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/dyingtolife",
+        "html_url": "https://github.com/dyingtolife",
+        "followers_url": "https://api.github.com/users/dyingtolife/followers",
+        "following_url": "https://api.github.com/users/dyingtolife/following{/other_user}",
+        "gists_url": "https://api.github.com/users/dyingtolife/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/dyingtolife/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/dyingtolife/subscriptions",
+        "organizations_url": "https://api.github.com/users/dyingtolife/orgs",
+        "repos_url": "https://api.github.com/users/dyingtolife/repos",
+        "events_url": "https://api.github.com/users/dyingtolife/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/dyingtolife/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "parents": [
+        {
+          "sha": "12aab9b773de6a1f2ff44ee9caba4ef83e24a7b5",
+          "url": "https://api.github.com/repos/dyingtolife/seekdb/commits/12aab9b773de6a1f2ff44ee9caba4ef83e24a7b5",
+          "html_url": "https://github.com/dyingtolife/seekdb/commit/12aab9b773de6a1f2ff44ee9caba4ef83e24a7b5"
+        }
+      ]
+    }
+  ],
+  "files": [
+    {
+      "sha": "edcfe9aaed6cf0b86dfa90eb58d5ec6aacdee541",
+      "filename": "docs/gpu-vector-index-hipvs-cuvs/contest-optimization.md",
+      "status": "added",
+      "additions": 85,
+      "deletions": 0,
+      "changes": 85,
+      "blob_url": "https://github.com/dyingtolife/seekdb/blob/bf0074456f4858f0f08d22e7d234ae67fbbb431d/docs%2Fgpu-vector-index-hipvs-cuvs%2Fcontest-optimization.md",
+      "raw_url": "https://github.com/dyingtolife/seekdb/raw/bf0074456f4858f0f08d22e7d234ae67fbbb431d/docs%2Fgpu-vector-index-hipvs-cuvs%2Fcontest-optimization.md",
+      "contents_url": "https://api.github.com/repos/dyingtolife/seekdb/contents/docs%2Fgpu-vector-index-hipvs-cuvs%2Fcontest-optimization.md?ref=bf0074456f4858f0f08d22e7d234ae67fbbb431d",
+      "patch": "@@ -0,0 +1,85 @@\n+# Contest optimisation notes (AMD track)\n+\n+Branch `amd-cagra-submit` on top of tag `amd-cagra-contest-baseline-v5`\n+(commit `634888d9b037153fa143d2c913ba4b25503e1d62`).  Two changes, each\n+independently switchable, no change to the SQL surface, the FP32/L2 contract or\n+the `lib=vsag` CPU path.\n+\n+## 1. Reuse per-index device scratch (`tools/hipvs_bridge/seekdb_cuvs_bridge.c`)\n+\n+The baseline allocated and freed three device buffers (`nq x dim` queries,\n+`nq x topk` ids, `nq x topk` distances) around every `knn_search`.  That is three\n+`cuvsRMMAlloc` + three `cuvsRMMFree` per query, i.e. fixed overhead on top of the\n+GPU work for single-row queries.\n+\n+Change: each index keeps 8 scratch slots and reuses the largest buffers it has\n+already allocated.  Slots are handed out under a per-index mutex, so concurrent\n+clients keep running in parallel; if all slots are busy the search allocates a\n+private scratch and still runs on the GPU (never serialises, never falls back).\n+\n+Also added (`OB_CUVS_LOG=0` silences it):\n+\n+```text\n+[seekdb_cuvs] build n=... dim=... ms=...      # GPU build wall time\n+[seekdb_cuvs] search nq=... topk=... ms=...   # GPU search wall time\n+```\n+\n+These lines are what the benchmarking harness uses to attribute time to the GPU\n+stage and to prove the CAGRA graph was really built on the GPU inside the timed\n+window.\n+\n+Optional build knobs (defaults reproduce the v5 graph exactly):\n+\n+| variable | default | meaning |\n+| --- | --- | --- |\n+| `OB_CUVS_NN_ITER` | 100 (v5) | nn-descent iterations |\n+| `OB_CUVS_GRAPH_DEGREE` | 128 (v5) | final CAGRA graph degree |\n+| `OB_CUVS_INTERMEDIATE_DEGREE` | 256 (v5) | intermediate graph degree |\n+\n+## 2. Overlap the CAGRA build with the CPU load (`src/oblib/lib/vector/ob_vsag_adaptor.cpp`)\n+\n+In the baseline the graph is still built at the very end of the DDL, inside\n+`ob_cuvs_serialize`, i.e. strictly after the CPU-bound VSAG construction has\n+finished.  The GPU is idle for the whole load and its build time is pure added\n+latency.\n+\n+Change: `ob_cuvs_add` now\n+\n+* reserves `buf_vecs_` / `buf_ids_` geometrically instead of relying on\n+  `std::vector::insert` growth (the baseline reallocates and copies the whole\n+  accumulated table O(log n) times), and\n+* starts a watcher thread that builds the CAGRA graph as soon as the buffered\n+  vectors stop growing (300 ms quiet, geometric growth) or when the loader is\n+  quiet for 500 ms, using the same 32 MB-stack pthread the baseline uses.\n+\n+The build runs with `g_ob_cuvs_mu` held, so it can never observe a reallocated\n+buffer; the entry is re-looked-up under that lock on every step, so dropping an\n+index simply stops the watcher; and serving still requires\n+`built_n_ == buf_ids_.size()`, so a stale graph is never used for results.  When\n+`ob_cuvs_serialize` runs it finds a ready graph and skips the rebuild.\n+\n+Runtime switches (all safe defaults):\n+\n+| variable | default | meaning |\n+| --- | --- | --- |\n+| `OB_CUVS_EAGER` | `1` | `0` disables the watcher and the reservation, restoring baseline behaviour |\n+| `OB_CUVS_SETTLE_MS` | `300` | quiet window for a geometric-growth build |\n+| `OB_CUVS_FINAL_MS` | `500` | quiet window for the tail build |\n+\n+## Reproduction\n+\n+```bash\n+# bridge\n+tools/hipvs_bridge/build.sh /work/bridge/libseekdb_cuvs_bridge.so\n+\n+# seekdb (same flags for baseline and candidate)\n+./build.sh release -DOB_BUILD_CUVS=ON -DOB_BUILD_CUVS_TRACE=ON \\\n+  -DCUVS_BRIDGE_LIB=/work/bridge/libseekdb_cuvs_bridge.so --make -j64\n+\n+# measurement: DDL + first query, 3 cache-cleared rounds per version, recall and\n+# QPS against exact ground truth -- see the harness shipped with the submission\n+```\n+\n+The contest scoring compares the end-to-end build window (CREATE VECTOR INDEX\n+until the first ANN query returns) of this branch against the frozen baseline on\n+the same machine, dataset and index parameters."
+    },
+    {
+      "sha": "eebc5facf06639071a156786aeeb5715683d7cd1",
+      "filename": "src/oblib/lib/vector/ob_vsag_adaptor.cpp",
+      "status": "modified",
+      "additions": 145,
+      "deletions": 2,
+      "changes": 147,
+      "blob_url": "https://github.com/dyingtolife/seekdb/blob/bf0074456f4858f0f08d22e7d234ae67fbbb431d/src%2Foblib%2Flib%2Fvector%2Fob_vsag_adaptor.cpp",
+      "raw_url": "https://github.com/dyingtolife/seekdb/raw/bf0074456f4858f0f08d22e7d234ae67fbbb431d/src%2Foblib%2Flib%2Fvector%2Fob_vsag_adaptor.cpp",
+      "contents_url": "https://api.github.com/repos/dyingtolife/seekdb/contents/src%2Foblib%2Flib%2Fvector%2Fob_vsag_adaptor.cpp?ref=bf0074456f4858f0f08d22e7d234ae67fbbb431d",
+      "patch": "@@ -87,6 +87,9 @@ struct ObCuvsEntry {\n   std::vector<int64_t> buf_ids_;// accumulated external vids from add_index\n   size_t built_n_ = 0;          // #vectors present when cuVS was last (re)built\n   bool vsag_ready_ = false;     // CPU fallback is built only when it is needed\n+  // ---- [contest] idle-triggered background CAGRA build (see ob_cuvs_watch_job) ----\n+  int64_t last_add_ms_ = 0;     // monotonic ms of the last buffered insert\n+  bool watch_inflight_ = false; // a watcher thread is already running for this key\n };\n static std::mutex g_ob_cuvs_mu;\n static std::map<void *, ObCuvsEntry *> g_ob_cuvs_reg;\n@@ -168,6 +171,7 @@ static void ob_cuvs_register(void *key, const float *vectors, const int64_t *ids\n // Buffer vectors arriving via add_index. Plain HNSW builds BOTH its delta and its\n // snapshot incrementally via add_index (one row at a time), so this is where the\n // real data flows -- unlike build_index which is only used by the HNSW_SQ bulk path.\n+static void ob_cuvs_start_watcher(void *key);  // defined with the idle-build logic below\n static void ob_cuvs_add(void *key, const float *vectors, const int64_t *ids,\n                         int dim, int size) {\n   if (vectors == nullptr || ids == nullptr || dim <= 0 || size <= 0) { return; }\n@@ -176,9 +180,27 @@ static void ob_cuvs_add(void *key, const float *vectors, const int64_t *ids,\n   if (slot == nullptr) { slot = new ObCuvsEntry(); slot->dim_ = dim; }\n   if (slot->dim_ == 0) { slot->dim_ = dim; }\n   if (slot->dim_ != dim) { return; }\n-  slot->buf_vecs_.insert(slot->buf_vecs_.end(), vectors,\n-                         vectors + static_cast<size_t>(dim) * size);\n+  // Reserve geometrically: the baseline relies on vector::insert growth, which\n+  // reallocates and copies the whole accumulated table O(log n) times.  For a\n+  // 1M x 768 float32 index that is several GB of extra host memcpy traffic,\n+  // all of it inside the timed build window (and inside g_ob_cuvs_mu).\n+  const size_t add_vecs = static_cast<size_t>(dim) * static_cast<size_t>(size);\n+  const size_t need_vecs = slot->buf_vecs_.size() + add_vecs;\n+  if (slot->buf_vecs_.capacity() < need_vecs) {\n+    size_t target = slot->buf_vecs_.capacity() * 2;\n+    if (target < need_vecs) { target = need_vecs; }\n+    slot->buf_vecs_.reserve(target);\n+  }\n+  const size_t need_ids = slot->buf_ids_.size() + static_cast<size_t>(size);\n+  if (slot->buf_ids_.capacity() < need_ids) {\n+    size_t target = slot->buf_ids_.capacity() * 2;\n+    if (target < need_ids) { target = need_ids; }\n+    slot->buf_ids_.reserve(target);\n+  }\n+  slot->buf_vecs_.insert(slot->buf_vecs_.end(), vectors, vectors + add_vecs);\n   slot->buf_ids_.insert(slot->buf_ids_.end(), ids, ids + size);\n+  slot->last_add_ms_ = ObTimeUtility::current_time() / 1000;\n+  ob_cuvs_start_watcher(key);\n }\n static bool ob_cuvs_vsag_ready(void *key) {\n   std::lock_guard<std::mutex> guard(g_ob_cuvs_mu);\n@@ -265,6 +287,127 @@ static void *ob_cuvs_raw_batch_job(void *arg) {\n \n static const size_t OB_CUVS_MIN_PTS = 256;  // CAGRA needs a graph; below this -> VSAG\n \n+// ==== [contest] idle-triggered background CAGRA build ======================\n+// On this baseline the GPU graph is still built at the very end of the DDL (in\n+// ob_cuvs_serialize), i.e. strictly after the CPU-bound VSAG construction has\n+// finished, so the GPU stays idle for the whole load and its build time is pure\n+// added latency.  The watcher below starts the CAGRA build as soon as the\n+// buffered vectors stop growing for a short while (or on geometric growth),\n+// while the loader is still inserting into VSAG.  The serialize step then finds\n+// a ready graph and the first query does not pay for it either.\n+//\n+// Safety:\n+//  * the build reads buf_vecs_ only with g_ob_cuvs_mu held, so it can never see\n+//    a reallocated buffer, and concurrent searches never see a half-built graph;\n+//  * the entry is re-looked-up under the lock on every step, so dropping an\n+//    index simply stops the watcher (no dangling pointer, no use-after-free);\n+//  * serving still requires built_n_ == buf_ids_.size() (baseline guard), so a\n+//    stale graph is never used for results;\n+//  * OB_CUVS_EAGER=0 disables everything here and restores baseline behaviour.\n+static inline bool ob_cuvs_eager_enabled() {\n+  static const bool enabled = []() {\n+    const char *e = ::getenv(\"OB_CUVS_EAGER\");\n+    return !(e != nullptr && e[0] == '0');\n+  }();\n+  return enabled;\n+}\n+static inline int64_t ob_cuvs_env_ms(const char *name, int64_t def_val) {\n+  const char *e = ::getenv(name);\n+  if (e == nullptr || e[0] == '\\0') { return def_val; }\n+  const int64_t v = ::atoll(e);\n+  return v > 0 ? v : def_val;\n+}\n+struct ObCuvsWatchArg {\n+  void *key_;\n+};\n+static void *ob_cuvs_watch_job(void *arg) {\n+  void *key = static_cast<ObCuvsWatchArg *>(arg)->key_;\n+  ::free(arg);\n+  const int64_t settle_ms = ob_cuvs_env_ms(\"OB_CUVS_SETTLE_MS\", 300);\n+  const int64_t final_ms = ob_cuvs_env_ms(\"OB_CUVS_FINAL_MS\", 500);\n+  while (true) {\n+    ::usleep(50 * 1000);\n+    bool build_now = false;\n+    bool stop = false;\n+    {\n+      std::lock_guard<std::mutex> guard(g_ob_cuvs_mu);\n+      auto it = g_ob_cuvs_reg.find(key);\n+      if (it == g_ob_cuvs_reg.end()) {\n+        stop = true;  // index dropped while watching\n+      } else {\n+        ObCuvsEntry *ent = it->second;\n+        const size_t n = ent->buf_ids_.size();\n+        const int64_t idle_ms =\n+            ObTimeUtility::current_time() / 1000 - ent->last_add_ms_;\n+        if (ent->dim_ > 0 && n >= OB_CUVS_MIN_PTS && n > ent->built_n_) {\n+          // geometric growth is worth a speculative build while loading; the\n+          // smaller tail is only built once the loader looks quiescent\n+          const bool geometric = (ent->built_n_ == 0 || n >= ent->built_n_ * 2);\n+          if (idle_ms >= (geometric ? settle_ms : final_ms)) { build_now = true; }\n+        } else if (idle_ms > final_ms * 4) {\n+          stop = true;  // graph current and loader quiet: nothing left to watch\n+        }\n+      }\n+    }\n+    if (build_now) {\n+      std::lock_guard<std::mutex> guard(g_ob_cuvs_mu);\n+      auto it = g_ob_cuvs_reg.find(key);\n+      if (it == g_ob_cuvs_reg.end()) { break; }\n+      ObCuvsEntry *ent = it->second;\n+      const size_t n = ent->buf_ids_.size();\n+      if (ent->dim_ > 0 && n >= OB_CUVS_MIN_PTS && n > ent->built_n_ &&\n+          ent->buf_vecs_.size() == n * static_cast<size_t>(ent->dim_)) {\n+        std::shared_ptr<void> nb = ob_cuvs_build_big_stack(\n+            ent->buf_vecs_.data(), static_cast<long>(n), ent->dim_);\n+        if (nb != nullptr) {\n+          ent->bridge_ = nb;\n+          ent->built_n_ = n;\n+          ent->ids_ = ent->buf_ids_;\n+          ob_vsag_trace(\"cuvs_async_build\", key, static_cast<long>(n), 0);\n+        }\n+      }\n+    } else if (stop) {\n+      break;\n+    }\n+  }\n+  {\n+    std::lock_guard<std::mutex> guard(g_ob_cuvs_mu);\n+    auto it = g_ob_cuvs_reg.find(key);\n+    if (it != g_ob_cuvs_reg.end()) { it->second->watch_inflight_ = false; }\n+  }\n+  return nullptr;\n+}\n+// Caller must hold g_ob_cuvs_mu (ob_cuvs_add does).\n+static void ob_cuvs_start_watcher(void *key) {\n+  if (key == nullptr || !ob_cuvs_enabled() || !ob_cuvs_eager_enabled()) { return; }\n+  auto it = g_ob_cuvs_reg.find(key);\n+  if (it == g_ob_cuvs_reg.end()) { return; }\n+  ObCuvsEntry *ent = it->second;\n+  if (ent->watch_inflight_ || ent->dim_ <= 0) { return; }\n+  if (ent->buf_ids_.size() < OB_CUVS_MIN_PTS) { return; }\n+  // Only kick a speculative rebuild on geometric growth; the tail is handled by\n+  // the already-running watcher when the loader goes quiet.\n+  if (ent->built_n_ != 0 && ent->buf_ids_.size() < ent->built_n_ * 2) { return; }\n+  ObCuvsWatchArg *arg =\n+      static_cast<ObCuvsWatchArg *>(::malloc(sizeof(ObCuvsWatchArg)));\n+  if (arg == nullptr) { return; }\n+  arg->key_ = key;\n+  ent->watch_inflight_ = true;\n+  pthread_t tid;\n+  pthread_attr_t attr;\n+  pthread_attr_init(&attr);\n+  // cuVS needs a stack far larger than an OB worker thread's (~1.5MB).\n+  pthread_attr_setstacksize(&attr, 32UL * 1024 * 1024);\n+  if (pthread_create(&tid, &attr, ob_cuvs_watch_job, arg) == 0) {\n+    pthread_detach(tid);\n+  } else {\n+    ::free(arg);\n+    ent->watch_inflight_ = false;\n+  }\n+  pthread_attr_destroy(&attr);\n+}\n+// ==== end contest idle build ==============================================\n+\n static bool ob_cuvs_try_search(void *key, vsag::Allocator *alloc,\n                                const float *query, int /*dim*/, int64_t topk,\n                                const float *&dist, const int64_t *&ids,"
+    },
+    {
+      "sha": "442689b2e3c5a1ce9142b45c25cc4d7d83e1933e",
+      "filename": "tools/hipvs_bridge/build.sh",
+      "status": "modified",
+      "additions": 1,
+      "deletions": 0,
+      "changes": 1,
+      "blob_url": "https://github.com/dyingtolife/seekdb/blob/bf0074456f4858f0f08d22e7d234ae67fbbb431d/tools%2Fhipvs_bridge%2Fbuild.sh",
+      "raw_url": "https://github.com/dyingtolife/seekdb/raw/bf0074456f4858f0f08d22e7d234ae67fbbb431d/tools%2Fhipvs_bridge%2Fbuild.sh",
+      "contents_url": "https://api.github.com/repos/dyingtolife/seekdb/contents/tools%2Fhipvs_bridge%2Fbuild.sh?ref=bf0074456f4858f0f08d22e7d234ae67fbbb431d",
+      "patch": "@@ -32,6 +32,7 @@ mkdir -p \"$(dirname \"$OUTPUT\")\"\n   -Wl,-soname,libseekdb_cuvs_bridge.so \\\n   -Wl,-rpath,\"$HIPVS_ROOT/lib:$ROCM_ROOT/lib\" \\\n   -lcuvs_c \\\n+  -lpthread \\\n   -o \"$OUTPUT\"\n \n echo \"built $OUTPUT\""
+    },
+    {
+      "sha": "b8f73d9fd98b62fdbb6a9efe4f22f968c919d6e2",
+      "filename": "tools/hipvs_bridge/seekdb_cuvs_bridge.c",
+      "status": "modified",
+      "additions": 202,
+      "deletions": 19,
+      "changes": 221,
+      "blob_url": "https://github.com/dyingtolife/seekdb/blob/bf0074456f4858f0f08d22e7d234ae67fbbb431d/tools%2Fhipvs_bridge%2Fseekdb_cuvs_bridge.c",
+      "raw_url": "https://github.com/dyingtolife/seekdb/raw/bf0074456f4858f0f08d22e7d234ae67fbbb431d/tools%2Fhipvs_bridge%2Fseekdb_cuvs_bridge.c",
+      "contents_url": "https://api.github.com/repos/dyingtolife/seekdb/contents/tools%2Fhipvs_bridge%2Fseekdb_cuvs_bridge.c?ref=bf0074456f4858f0f08d22e7d234ae67fbbb431d",
+      "patch": "@@ -1,4 +1,28 @@\n-/* seekdb <-> hipVS bridge: plain-C CAGRA kNN; all cuVS/ROCm deps live here. */\n+/* seekdb <-> hipVS bridge: plain-C CAGRA kNN; all cuVS/ROCm deps live here.\n+ *\n+ * Contest optimisation notes (AMD eco track, seekdb x hipVS/cuVS, baseline v5):\n+ *  1. Per-search device scratch (query / neighbor ids / distances) is pooled per\n+ *     index and reused instead of being allocated and freed on every\n+ *     knn_search call.  Concurrent searches each take their own slot, so\n+ *     multi-client QPS does not serialise; a search that finds every slot busy\n+ *     falls back to a private scratch and still runs on the GPU.\n+ *  2. Build and search wall times are printed to stderr so the benchmark\n+ *     harness can attribute time to the GPU stage and prove the graph was built\n+ *     on the GPU inside the timed window (OB_CUVS_LOG=0 silences it).\n+ *  3. Optional build knobs, defaulting to the baseline v5 values:\n+ *        OB_CUVS_NN_ITER=<int>             nn-descent iterations   (v5: 100)\n+ *        OB_CUVS_GRAPH_DEGREE=<int>        final graph degree      (v5: 128)\n+ *        OB_CUVS_INTERMEDIATE_DEGREE=<int> intermediate degree     (v5: 256)\n+ *     They only exist so the recall/build-time trade-off can be measured on the\n+ *     contest data; leaving them unset reproduces the frozen v5 graph exactly.\n+ */\n+#ifndef _GNU_SOURCE\n+#define _GNU_SOURCE 1\n+#endif\n+#ifndef _POSIX_C_SOURCE\n+#define _POSIX_C_SOURCE 200809L\n+#endif\n+\n #include \"seekdb_cuvs_bridge.h\"\n #include <cuvs/core/c_api.h>\n #include <cuvs/neighbors/cagra.h>\n@@ -8,20 +32,151 @@\n #else\n #include <cuda_runtime.h>\n #endif\n+#include <pthread.h>\n #include <stdio.h>\n #include <stdlib.h>\n+#include <string.h>\n+#include <time.h>\n+\n+/* Reusable search scratch slots per index (one per concurrent query). */\n+#define SK_SLOT_COUNT 8\n+\n+typedef struct {\n+  float* q;      /* device: nq x dim  */\n+  unsigned* n;   /* device: nq x topk */\n+  float* d;      /* device: nq x topk */\n+  size_t q_cap;  /* capacities, in elements */\n+  size_t n_cap;\n+  size_t d_cap;\n+  int busy;\n+} sk_slot;\n \n typedef struct {\n   cuvsResources_t        res;\n   cuvsCagraIndexParams_t ip;\n   cuvsCagraIndex_t       idx;\n   long n, dim;\n+  pthread_mutex_t mu; /* guards slots[] only */\n+  sk_slot slots[SK_SLOT_COUNT];\n } sk_cuvs_index;\n \n+static long sk_now_ms(void)\n+{\n+  struct timespec ts;\n+  if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0) return 0;\n+  return (long)ts.tv_sec * 1000L + (long)(ts.tv_nsec / 1000000L);\n+}\n+\n+static int sk_log_enabled(void)\n+{\n+  const char* v = getenv(\"OB_CUVS_LOG\");\n+  return (v == NULL || v[0] != '0');\n+}\n+\n+static int sk_env_int(const char* name, int def_val, int lo, int hi)\n+{\n+  const char* raw = getenv(name);\n+  char* end = NULL;\n+  long v = 0;\n+  if (raw == NULL || raw[0] == '\\0') return def_val;\n+  v = strtol(raw, &end, 10);\n+  if (end == raw) return def_val;\n+  if (v < lo) v = lo;\n+  if (v > hi) v = hi;\n+  return (int)v;\n+}\n+\n+static void sk_apply_build_knobs(cuvsCagraIndexParams_t ip)\n+{\n+  int niter = -1;\n+  int degree = -1;\n+  int idegree = -1;\n+  if (ip == NULL) return;\n+  niter = sk_env_int(\"OB_CUVS_NN_ITER\", -1, 1, 400);\n+  if (niter > 0) ip->nn_descent_niter = niter;\n+  degree = sk_env_int(\"OB_CUVS_GRAPH_DEGREE\", -1, 8, 512);\n+  if (degree > 0) ip->graph_degree = degree;\n+  idegree = sk_env_int(\"OB_CUVS_INTERMEDIATE_DEGREE\", -1, 8, 1024);\n+  if (idegree > 0) ip->intermediate_graph_degree = idegree;\n+  if (sk_log_enabled()) {\n+    fprintf(stderr, \"[seekdb_cuvs] build_knobs niter=%d degree=%d intermediate=%d\\n\",\n+            niter, degree, idegree);\n+  }\n+}\n+\n+static void sk_slot_release_dev(sk_cuvs_index* h, sk_slot* s)\n+{\n+  if (s->q != NULL) cuvsRMMFree(h->res, s->q, sizeof(float) * s->q_cap);\n+  if (s->n != NULL) cuvsRMMFree(h->res, s->n, sizeof(unsigned) * s->n_cap);\n+  if (s->d != NULL) cuvsRMMFree(h->res, s->d, sizeof(float) * s->d_cap);\n+  s->q = NULL; s->n = NULL; s->d = NULL;\n+  s->q_cap = 0; s->n_cap = 0; s->d_cap = 0;\n+}\n+\n+/* Grow the slot so it can hold nq*dim floats and nq*topk results. */\n+static int sk_slot_reserve(sk_cuvs_index* h, sk_slot* s, size_t q_need, size_t k_need)\n+{\n+  int rc = 0;\n+  if (s->q == NULL || s->q_cap < q_need) {\n+    if (s->q != NULL) { cuvsRMMFree(h->res, s->q, sizeof(float) * s->q_cap); s->q = NULL; s->q_cap = 0; }\n+    if (cuvsRMMAlloc(h->res, (void**)&s->q, sizeof(float) * q_need) != CUVS_SUCCESS) { s->q = NULL; rc = 10; }\n+    else s->q_cap = q_need;\n+  }\n+  if (rc == 0 && (s->n == NULL || s->n_cap < k_need)) {\n+    if (s->n != NULL) { cuvsRMMFree(h->res, s->n, sizeof(unsigned) * s->n_cap); s->n = NULL; s->n_cap = 0; }\n+    if (cuvsRMMAlloc(h->res, (void**)&s->n, sizeof(unsigned) * k_need) != CUVS_SUCCESS) { s->n = NULL; rc = 11; }\n+    else s->n_cap = k_need;\n+  }\n+  if (rc == 0 && (s->d == NULL || s->d_cap < k_need)) {\n+    if (s->d != NULL) { cuvsRMMFree(h->res, s->d, sizeof(float) * s->d_cap); s->d = NULL; s->d_cap = 0; }\n+    if (cuvsRMMAlloc(h->res, (void**)&s->d, sizeof(float) * k_need) != CUVS_SUCCESS) { s->d = NULL; rc = 12; }\n+    else s->d_cap = k_need;\n+  }\n+  return rc;\n+}\n+\n+static sk_slot* sk_slot_acquire(sk_cuvs_index* h, sk_slot* spare, int* pooled)\n+{\n+  int i = 0;\n+  sk_slot* slot = NULL;\n+  *pooled = 0;\n+  pthread_mutex_lock(&h->mu);\n+  for (i = 0; i < SK_SLOT_COUNT; ++i) {\n+    if (!h->slots[i].busy) {\n+      h->slots[i].busy = 1;\n+      slot = &h->slots[i];\n+      *pooled = 1;\n+      break;\n+    }\n+  }\n+  pthread_mutex_unlock(&h->mu);\n+  if (slot == NULL) {\n+    /* More concurrent searches than slots: private scratch beats serialising. */\n+    memset(spare, 0, sizeof(*spare));\n+    slot = spare;\n+  }\n+  return slot;\n+}\n+\n+static void sk_slot_give_back(sk_cuvs_index* h, sk_slot* slot, int pooled)\n+{\n+  if (pooled) {\n+    pthread_mutex_lock(&h->mu);\n+    slot->busy = 0;\n+    pthread_mutex_unlock(&h->mu);\n+  } else {\n+    sk_slot_release_dev(h, slot);\n+  }\n+}\n+\n+\n void* seekdb_cuvs_build(const float* base, long n, long dim)\n {\n   sk_cuvs_index* h = (sk_cuvs_index*)calloc(1, sizeof(*h));\n+  long t0 = 0;\n   if (!h) return NULL;\n+  if (base == NULL || n <= 0 || dim <= 0) { free(h); return NULL; }\n+  pthread_mutex_init(&h->mu, NULL);\n   if (cuvsResourcesCreate(&h->res) != CUVS_SUCCESS) { free(h); return NULL; }\n \n   DLManagedTensor dset; long ds[2] = {n, dim};\n@@ -36,14 +191,20 @@ void* seekdb_cuvs_build(const float* base, long n, long dim)\n   h->ip->graph_degree = 128;\n   h->ip->intermediate_graph_degree = 256;\n   h->ip->nn_descent_niter = 100;\n+  sk_apply_build_knobs(h->ip);\n   if (cuvsCagraIndexCreate(&h->idx)      != CUVS_SUCCESS) goto fail_ip;\n+  t0 = sk_now_ms();\n   if (cuvsCagraBuild(h->res, h->ip, &dset, h->idx) != CUVS_SUCCESS) goto fail_idx;\n+  if (sk_log_enabled()) {\n+    fprintf(stderr, \"[seekdb_cuvs] build n=%ld dim=%ld ms=%ld\\n\", n, dim, sk_now_ms() - t0);\n+  }\n   h->n = n; h->dim = dim;\n   return h;\n \n fail_idx: cuvsCagraIndexDestroy(h->idx);\n fail_ip:  cuvsCagraIndexParamsDestroy(h->ip);\n-fail_res: cuvsResourcesDestroy(h->res); free(h);\n+fail_res: pthread_mutex_destroy(&h->mu);\n+  cuvsResourcesDestroy(h->res); free(h);\n   fprintf(stderr, \"[seekdb_cuvs] build failed: %s\\n\", cuvsGetLastErrorText());\n   return NULL;\n }\n@@ -52,47 +213,67 @@ int seekdb_cuvs_search(void* handle, const float* query, long nq, long topk,\n                        unsigned int* out_ids, float* out_dist)\n {\n   sk_cuvs_index* h = (sk_cuvs_index*)handle;\n-  if (!h) return 1;\n+  sk_slot spare;\n+  sk_slot* slot = NULL;\n+  cuvsCagraSearchParams_t sp = 0;\n+  size_t q_need = 0, k_need = 0;\n   int rc = 0;\n-  float* qd = 0; unsigned* nd = 0; float* dd = 0; cuvsCagraSearchParams_t sp = 0;\n-  if (cuvsRMMAlloc(h->res, (void**)&qd, sizeof(float)*nq*h->dim)  != CUVS_SUCCESS) { rc=10; goto done; }\n-  if (cuvsRMMAlloc(h->res, (void**)&nd, sizeof(unsigned)*nq*topk) != CUVS_SUCCESS) { rc=11; goto done; }\n-  if (cuvsRMMAlloc(h->res, (void**)&dd, sizeof(float)*nq*topk)    != CUVS_SUCCESS) { rc=12; goto done; }\n-  if (cudaMemcpy(qd, query, sizeof(float)*nq*h->dim, cudaMemcpyDefault) != cudaSuccess) { rc=13; goto done; }\n+  int pooled = 0;\n+  long t0 = 0;\n+\n+  if (!h) return 1;\n+  if (query == NULL || out_ids == NULL || nq <= 0 || topk <= 0 || h->dim <= 0) return 2;\n+\n+  q_need = (size_t)nq * (size_t)h->dim;\n+  k_need = (size_t)nq * (size_t)topk;\n+  slot = sk_slot_acquire(h, &spare, &pooled);\n+  t0 = sk_now_ms();\n+  rc = sk_slot_reserve(h, slot, q_need, k_need);\n+  if (rc != 0) goto done;\n+  if (cudaMemcpy(slot->q, query, sizeof(float)*q_need, cudaMemcpyDefault) != cudaSuccess) { rc=13; goto done; }\n   {\n     DLManagedTensor qt, nt, dt; long qs[2]={nq,h->dim}, nsh[2]={nq,topk}, dsh[2]={nq,topk};\n-    qt.dl_tensor.data=qd; qt.dl_tensor.device.device_type=kDLCUDA; qt.dl_tensor.device.device_id=0;\n+    memset(&qt, 0, sizeof(qt));\n+    qt.dl_tensor.data=slot->q; qt.dl_tensor.device.device_type=kDLCUDA; qt.dl_tensor.device.device_id=0;\n     qt.dl_tensor.ndim=2; qt.dl_tensor.dtype.code=kDLFloat; qt.dl_tensor.dtype.bits=32; qt.dl_tensor.dtype.lanes=1;\n     qt.dl_tensor.shape=qs; qt.dl_tensor.strides=0; qt.dl_tensor.byte_offset=0;\n-    nt=qt; nt.dl_tensor.data=nd; nt.dl_tensor.dtype.code=kDLUInt; nt.dl_tensor.shape=nsh;\n-    dt=qt; dt.dl_tensor.data=dd; dt.dl_tensor.dtype.code=kDLFloat; dt.dl_tensor.shape=dsh;\n+    nt=qt; nt.dl_tensor.data=slot->n; nt.dl_tensor.dtype.code=kDLUInt; nt.dl_tensor.shape=nsh;\n+    dt=qt; dt.dl_tensor.data=slot->d; dt.dl_tensor.dtype.code=kDLFloat; dt.dl_tensor.shape=dsh;\n     if (cuvsCagraSearchParamsCreate(&sp) != CUVS_SUCCESS) { rc=14; goto done; }\n     {\n       size_t required_itopk = (size_t)topk * 4;\n       if (required_itopk < 512) required_itopk = 512;\n       if (sp->itopk_size < required_itopk) sp->itopk_size = required_itopk;\n       sp->search_width = 4;\n     }\n-    cuvsFilter f; f.type=NO_FILTER; f.addr=(uintptr_t)0;\n-    if (cuvsCagraSearch(h->res, sp, h->idx, &qt, &nt, &dt, f) != CUVS_SUCCESS) { rc=15; goto done; }\n-    if (cudaMemcpy(out_ids, nd, sizeof(unsigned)*nq*topk, cudaMemcpyDefault) != cudaSuccess) { rc=16; goto done; }\n-    if (out_dist) cudaMemcpy(out_dist, dd, sizeof(float)*nq*topk, cudaMemcpyDefault);\n+    {\n+      cuvsFilter f; f.type=NO_FILTER; f.addr=(uintptr_t)0;\n+      if (cuvsCagraSearch(h->res, sp, h->idx, &qt, &nt, &dt, f) != CUVS_SUCCESS) { rc=15; goto done; }\n+    }\n+    if (cudaMemcpy(out_ids, slot->n, sizeof(unsigned)*k_need, cudaMemcpyDefault) != cudaSuccess) { rc=16; goto done; }\n+    if (out_dist &&\n+        cudaMemcpy(out_dist, slot->d, sizeof(float)*k_need, cudaMemcpyDefault) != cudaSuccess) { rc=17; }\n   }\n done:\n   if (sp) cuvsCagraSearchParamsDestroy(sp);\n-  if (dd) cuvsRMMFree(h->res, dd, sizeof(float)*nq*topk);\n-  if (nd) cuvsRMMFree(h->res, nd, sizeof(unsigned)*nq*topk);\n-  if (qd) cuvsRMMFree(h->res, qd, sizeof(float)*nq*h->dim);\n-  if (rc) fprintf(stderr, \"[seekdb_cuvs] search rc=%d: %s\\n\", rc, cuvsGetLastErrorText());\n+  sk_slot_give_back(h, slot, pooled);\n+  if (rc) {\n+    fprintf(stderr, \"[seekdb_cuvs] search rc=%d: %s\\n\", rc, cuvsGetLastErrorText());\n+  } else if (sk_log_enabled()) {\n+    fprintf(stderr, \"[seekdb_cuvs] search nq=%ld topk=%ld ms=%ld\\n\", nq, topk, sk_now_ms() - t0);\n+  }\n   return rc;\n }\n \n void seekdb_cuvs_free(void* handle)\n {\n   sk_cuvs_index* h = (sk_cuvs_index*)handle;\n+  int i = 0;\n   if (!h) return;\n+  for (i = 0; i < SK_SLOT_COUNT; ++i) sk_slot_release_dev(h, &h->slots[i]);\n   cuvsCagraIndexDestroy(h->idx);\n   cuvsCagraIndexParamsDestroy(h->ip);\n+  pthread_mutex_destroy(&h->mu);\n   cuvsResourcesDestroy(h->res);\n   free(h);\n }\n@@ -113,6 +294,7 @@ void* seekdb_cuvs_deserialize(const char* filename, long n, long dim)\n   if (!filename || n <= 0 || dim <= 0) return NULL;\n   sk_cuvs_index* index = (sk_cuvs_index*)calloc(1, sizeof(*index));\n   if (!index) return NULL;\n+  pthread_mutex_init(&index->mu, NULL);\n   if (cuvsResourcesCreate(&index->res) != CUVS_SUCCESS) goto fail;\n   if (cuvsCagraIndexParamsCreate(&index->ip) != CUVS_SUCCESS) goto fail_res;\n   if (cuvsCagraIndexCreate(&index->idx) != CUVS_SUCCESS) goto fail_ip;\n@@ -139,6 +321,7 @@ void* seekdb_cuvs_deserialize(const char* filename, long n, long dim)\n   cuvsResourcesDestroy(index->res);\n fail:\n   fprintf(stderr, \"[seekdb_cuvs] deserialize failed: %s\\n\", cuvsGetLastErrorText());\n+  pthread_mutex_destroy(&index->mu);\n   free(index);\n   return NULL;\n }"
+    }
+  ]
+}

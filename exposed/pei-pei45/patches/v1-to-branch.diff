@@ -1,0 +1,286 @@
+diff --git a/src/oblib/lib/vector/ob_vsag_adaptor.cpp b/src/oblib/lib/vector/ob_vsag_adaptor.cpp
+index dcea94688..50a4230c9 100644
+--- a/src/oblib/lib/vector/ob_vsag_adaptor.cpp
++++ b/src/oblib/lib/vector/ob_vsag_adaptor.cpp
+@@ -56,6 +56,11 @@ static int   seekdb_cuvs_search(void *, const float *, long, long, unsigned int
+ static void  seekdb_cuvs_free(void *) {}
+ #endif
+ 
++#include <unordered_map>
++
++#include <queue>
++#include <utility>
++
+ namespace oceanbase {
+ namespace common {
+ namespace obvsag {
+@@ -74,7 +79,13 @@ struct ObCuvsEntry {
+   std::vector<int64_t> ids_;    // CAGRA row offset -> external vid (of the built index)
+   std::vector<float> buf_vecs_; // accumulated vectors (row-major) from add_index
+   std::vector<int64_t> buf_ids_;// accumulated external vids from add_index
++  // vid -> row slot in buf_vecs_. add_index() is invoked for both the delta and
++  // the snapshot graph, so without this the same row is buffered twice and CAGRA
++  // returns duplicate neighbours.
++  std::unordered_map<int64_t, size_t> id2slot_;
+   size_t built_n_ = 0;          // #vectors present when cuVS was last (re)built
++  bool vsag_deferred_ = false;  // CPU graph intentionally not built on insert
++  bool vsag_materialized_ = false;  // ... and now built on demand
+ };
+ static std::mutex g_ob_cuvs_mu;
+ static std::map<void *, ObCuvsEntry *> g_ob_cuvs_reg;
+@@ -89,6 +100,33 @@ static inline bool ob_cuvs_enabled() {
+ #endif
+ }
+ // Per-index opt-in: the plugin marks a handle when its index was declared lib=cuvs.
++// Experiment gate: buffer lib=cuvs rows on the GPU side only and defer the CPU
++// HNSW graph (see patch_cagra.py). Off unless OB_CUVS_DEFER_VSAG=1, so the
++// stock behaviour stays one env var away.
++static inline bool ob_cuvs_defer_vsag() {
++#ifdef OB_BUILD_CUVS
++  static const bool on = []() {
++    const char *env = ::getenv("OB_CUVS_DEFER_VSAG");
++    return env != nullptr && env[0] == '1';
++  }();
++  return on;
++#else
++  return false;
++#endif
++}
++// True when this index should keep deferring the CPU graph. Once the graph has
++// been materialised we stop deferring so later inserts keep it consistent.
++// Defined here (not with the fallback code) because it only touches the
++// registry, while the caller add_index() is far above the search entry points.
++static bool ob_cuvs_take_defer(void *key)
++{
++  std::lock_guard<std::mutex> guard(g_ob_cuvs_mu);
++  auto it = g_ob_cuvs_reg.find(key);
++  if (it == g_ob_cuvs_reg.end() || it->second == nullptr) { return false; }
++  if (it->second->vsag_materialized_) { return false; }
++  it->second->vsag_deferred_ = true;
++  return true;
++}
+ static inline bool ob_cuvs_marked(void *key) {
+ #ifdef OB_BUILD_CUVS
+   std::lock_guard<std::mutex> guard(g_ob_cuvs_marked_mu);
+@@ -139,9 +177,21 @@ static void ob_cuvs_add(void *key, const float *vectors, const int64_t *ids,
+   if (slot == nullptr) { slot = new ObCuvsEntry(); slot->dim_ = dim; }
+   if (slot->dim_ == 0) { slot->dim_ = dim; }
+   if (slot->dim_ != dim) { return; }
+-  slot->buf_vecs_.insert(slot->buf_vecs_.end(), vectors,
+-                         vectors + static_cast<size_t>(dim) * size);
+-  slot->buf_ids_.insert(slot->buf_ids_.end(), ids, ids + size);
++  const size_t d = static_cast<size_t>(dim);
++  for (int i = 0; i < size; ++i) {
++    const int64_t vid = ids[i];
++    auto it = slot->id2slot_.find(vid);
++    if (it != slot->id2slot_.end()) {
++      // same vid again: refresh in place (delta/snapshot duplicate, or an update)
++      ::memcpy(slot->buf_vecs_.data() + it->second * d, vectors + static_cast<size_t>(i) * d,
++               sizeof(float) * d);
++    } else {
++      slot->id2slot_.emplace(vid, slot->buf_ids_.size());
++      slot->buf_ids_.push_back(vid);
++      slot->buf_vecs_.insert(slot->buf_vecs_.end(), vectors + static_cast<size_t>(i) * d,
++                             vectors + static_cast<size_t>(i + 1) * d);
++    }
++  }
+ }
+ static void ob_cuvs_erase(void *key) {
+   { std::lock_guard<std::mutex> mg(g_ob_cuvs_marked_mu); g_ob_cuvs_marked.erase(key); }
+@@ -162,6 +212,8 @@ struct ObCuvsJob {
+ static void *ob_cuvs_job(void *arg) {
+   ObCuvsJob *j = static_cast<ObCuvsJob *>(arg);
+   if (j->need_build) {
++    LOG_INFO("[OBVSAG][cuVS] CAGRA build", "n", static_cast<long>(j->n),
++             "dim", j->dim, "unique_vids", static_cast<long>(j->ent->buf_ids_.size()));
+     void *nb = seekdb_cuvs_build(j->ent->buf_vecs_.data(), static_cast<long>(j->n),
+                                  static_cast<long>(j->dim));
+     if (nb != nullptr) {
+@@ -256,10 +308,19 @@ static bool ob_cuvs_try_search(void *key, vsag::Allocator *alloc,
+   // excluded, fall back to VSAG (the true filtered top-k may rank beyond k here).
+   if (filter != nullptr) {
+     FilterInterface *fi = static_cast<FilterInterface *>(filter);
++    bool all_valid = true;
+     for (int64_t i = 0; i < topk; ++i) {
+       int64_t vid = (off[i] < ent->ids_.size()) ? static_cast<int64_t>(ent->ids_[off[i]]) : -1;
+       const bool valid = reverse_filter ? fi->test(vid) : !fi->test(vid);
+-      if (!valid) { return false; }
++      if (!valid) { all_valid = false; break; }
++    }
++    if (!all_valid) {
++      // The unfiltered top-k contains rows this query must not see. Filter
++      // evaluation itself needs CPU-side index state (ObHnswBitmapFilter::test
++      // resolves SIMPLE_RANGE predicates through the adaptor), so the only
++      // correct answer is to decline here and let the caller materialise the
++      // deferred CPU graph and re-run the query on it.
++      return false;
+     }
+   }
+   int64_t *out_ids = static_cast<int64_t *>(
+@@ -502,6 +563,61 @@ int HnswIndexHandler::add_index(const vsag::DatasetPtr &incremental)
+   return ret;
+ }
+ 
++// A deferred index (see ob_cuvs_take_defer) has no CPU graph, which is fine while
++// cuVS answers the query. The moment cuVS is not allowed to -- a restricted
++// pre-filter, or a stale GPU build -- the VSAG fallback below would search an
++// empty index and the caller would see zero rows. Every row is still in
++// buf_vecs_/buf_ids_, so rebuild the CPU graph from that buffer here: one bulk
++// Add, once per index. Afterwards vsag_materialized_ stops the deferral so later
++// inserts keep both graphs consistent.
++static std::mutex g_ob_cuvs_mat_mu;
++static int ob_cuvs_materialize(void *key, HnswIndexHandler *hnsw)
++{
++  int ret = OB_SUCCESS;
++  std::vector<float> vecs;
++  std::vector<int64_t> ids;
++  int64_t dim = 0;
++  {
++    // Serialise materialisation: two queries may need the graph at the same time.
++    std::lock_guard<std::mutex> build_guard(g_ob_cuvs_mat_mu);
++    {
++      std::lock_guard<std::mutex> guard(g_ob_cuvs_mu);
++      std::map<void *, ObCuvsEntry *>::iterator it = g_ob_cuvs_reg.find(key);
++      if (it == g_ob_cuvs_reg.end() || it->second == nullptr) {
++        return OB_SUCCESS;
++      }
++      ObCuvsEntry *ent = it->second;
++      if (!ent->vsag_deferred_ || ent->vsag_materialized_ || ent->buf_ids_.empty()) {
++        return OB_SUCCESS;
++      }
++      ent->vsag_materialized_ = true;
++      dim = ent->dim_;
++      vecs = ent->buf_vecs_;
++      ids = ent->buf_ids_;
++    }
++    const int64_t CHUNK = 4096;
++    const int64_t total = static_cast<int64_t>(ids.size());
++    for (int64_t off = 0; OB_SUCC(ret) && off < total; off += CHUNK) {
++      const int64_t n = (off + CHUNK <= total) ? CHUNK : (total - off);
++      vsag::DatasetPtr dataset = vsag::Dataset::Make();
++      dataset->Dim(dim)
++          ->NumElements(n)
++          ->Ids(ids.data() + off)
++          ->Float32Vectors(vecs.data() + off * dim)
++          ->Owner(false);
++      if (OB_FAIL(hnsw->add_index(dataset))) {
++        LOG_WARN("[OBVSAG][cuVS] materialise chunk failed", K(ret), K(off), K(n));
++      }
++    }
++    if (OB_SUCC(ret)) {
++      LOG_INFO("[OBVSAG][cuVS] materialised deferred CPU graph", K(total), K(dim),
++               "index_number", hnsw->get_index_number());
++    }
++  }
++  return ret;
++}
++
++
+ int HnswIndexHandler::cal_distance_by_id(uint32_t len, uint32_t *dims, float *vals,
+                                          const int64_t *ids, int64_t count,
+                                          const float *&dist)
+@@ -1293,9 +1409,16 @@ int add_index(VectorIndexPtr &index_handler, float *vector,
+ {
+   int ret = OB_SUCCESS;
+   ob_vsag_trace("add_dense", (const void*)index_handler, (long)(dim), (long)(size));
+-  if (ob_cuvs_marked(index_handler) && index_handler != nullptr &&
+-      strcmp(static_cast<HnswIndexHandler *>(index_handler)->get_metric(), "l2") == 0) {
++  const bool cuvs_route = (ob_cuvs_marked(index_handler) && index_handler != nullptr &&
++      strcmp(static_cast<HnswIndexHandler *>(index_handler)->get_metric(), "l2") == 0);
++  if (cuvs_route) {
+     ob_cuvs_add(index_handler, vector, ids, dim, size);
++    if (ob_cuvs_defer_vsag() && ob_cuvs_take_defer(index_handler)) {
++      // The GPU buffer above is what serves queries for this index; skip the
++      // incremental CPU insert so the build is not paid twice.
++      ob_vsag_trace("cuvs_defer_add", (const void *)index_handler, (long)dim, (long)size);
++      return OB_SUCCESS;
++    }
+   }
+   if (index_handler == nullptr || vector == nullptr || ids == nullptr) {
+     ret = OB_INVALID_ARGUMENT;
+@@ -1382,6 +1505,17 @@ int get_index_number(VectorIndexPtr &index_handler, int64_t &size)
+   } else {
+     HnswIndexHandler *hnsw = static_cast<HnswIndexHandler *>(index_handler);
+     size = hnsw->get_index_number();
++    // A deferred CPU graph would report 0 even though the GPU index is built and
++    // serving, which makes row-count gates skip the index entirely. The buffer is
++    // the authoritative row count for this index.
++    if (ob_cuvs_marked(index_handler)) {
++      std::lock_guard<std::mutex> guard(g_ob_cuvs_mu);
++      auto it = g_ob_cuvs_reg.find(index_handler);
++      if (it != g_ob_cuvs_reg.end() && it->second != nullptr &&
++          it->second->vsag_deferred_ && !it->second->buf_ids_.empty()) {
++        size = static_cast<int64_t>(it->second->buf_ids_.size());
++      }
++    }
+   }
+   return ret;
+ }
+@@ -1454,10 +1588,20 @@ int knn_search(VectorIndexPtr &index_handler, float *query_vector,
+   } else {
+     if (ob_cuvs_marked(index_handler)) {
+       HnswIndexHandler *cuvs_hnsw = static_cast<HnswIndexHandler *>(index_handler);
+-      if (strcmp(cuvs_hnsw->get_metric(), "l2") == 0 &&
+-          ob_cuvs_try_search(index_handler, cuvs_hnsw->get_allocator(),
+-                             query_vector, dim, topk, dist, ids, result_size, invalid, reverse_filter)) {
+-        return OB_SUCCESS;
++      if (strcmp(cuvs_hnsw->get_metric(), "l2") == 0) {
++        // Single-shot query: cuVS answers it whenever it can. It declines for a
++        // restricted pre-filter (a row predicate it cannot evaluate) or a stale
++        // GPU build; a deferred index then has no CPU graph to fall back to, so
++        // materialise it first and let VSAG answer instead.
++        if (ob_cuvs_try_search(index_handler, cuvs_hnsw->get_allocator(),
++                               query_vector, dim, topk, dist, ids, result_size,
++                               invalid, reverse_filter)) {
++          return OB_SUCCESS;
++        }
++        if (OB_FAIL(ob_cuvs_materialize(index_handler, cuvs_hnsw))) {
++          LOG_WARN("[OBVSAG][cuVS] failed to materialise deferred CPU graph", K(ret));
++          ret = OB_SUCCESS;
++        }
+       }
+     }
+     FilterInterface *bitmap = static_cast<FilterInterface *>(invalid);
+@@ -1503,10 +1647,16 @@ int knn_search(VectorIndexPtr &index_handler, float *query_vector,
+   } else {
+     if (ob_cuvs_marked(index_handler)) {
+       HnswIndexHandler *cuvs_hnsw = static_cast<HnswIndexHandler *>(index_handler);
+-      if (strcmp(cuvs_hnsw->get_metric(), "l2") == 0 &&
+-          ob_cuvs_try_search(index_handler, cuvs_hnsw->get_allocator(),
+-                             query_vector, dim, topk, dist, ids, result_size, invalid, reverse_filter)) {
+-        return OB_SUCCESS;
++      if (strcmp(cuvs_hnsw->get_metric(), "l2") == 0) {
++        // Iterative scan: the executor pulls candidates in batches and applies the
++        // row predicate itself, so it needs an index it can walk deeper into. A
++        // one-shot GPU top-k cannot do that (it would return the same k rows on
++        // every call, and all of them may be filtered away). Materialise the CPU
++        // graph once and let VSAG iterate, like the frozen baseline.
++        if (OB_FAIL(ob_cuvs_materialize(index_handler, cuvs_hnsw))) {
++          LOG_WARN("[OBVSAG][cuVS] failed to materialise deferred CPU graph", K(ret));
++          ret = OB_SUCCESS;
++        }
+       }
+     }
+     FilterInterface *bitmap = static_cast<FilterInterface *>(invalid);
+diff --git a/tools/hipvs_bridge/seekdb_cuvs_bridge.c b/tools/hipvs_bridge/seekdb_cuvs_bridge.c
+index 11a348c95..cc0a359e3 100644
+--- a/tools/hipvs_bridge/seekdb_cuvs_bridge.c
++++ b/tools/hipvs_bridge/seekdb_cuvs_bridge.c
+@@ -10,6 +10,7 @@
+ #endif
+ #include <stdio.h>
+ #include <stdlib.h>
++#include <string.h>
+ 
+ typedef struct {
+   cuvsResources_t        res;
+@@ -63,6 +64,9 @@ int seekdb_cuvs_search(void* handle, const float* query, long nq, long topk,
+     nt=qt; nt.dl_tensor.data=nd; nt.dl_tensor.dtype.code=kDLUInt; nt.dl_tensor.shape=nsh;
+     dt=qt; dt.dl_tensor.data=dd; dt.dl_tensor.dtype.code=kDLFloat; dt.dl_tensor.shape=dsh;
+     if (cuvsCagraSearchParamsCreate(&sp) != CUVS_SUCCESS) { rc=14; goto done; }
++    /* itopk_size bounds how many neighbours the search can return; its default
++     * (64) silently caps `limit k` at 64. Raise it to the requested topk. */
++    if (sp->itopk_size < (size_t)topk) { sp->itopk_size = (size_t)topk; }
+     cuvsFilter f; f.type=NO_FILTER; f.addr=(uintptr_t)0;
+     if (cuvsCagraSearch(h->res, sp, h->idx, &qt, &nt, &dt, f) != CUVS_SUCCESS) { rc=15; goto done; }
+     if (cudaMemcpy(out_ids, nd, sizeof(unsigned)*nq*topk, cudaMemcpyDefault) != cudaSuccess) { rc=16; goto done; }
