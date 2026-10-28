@@ -25,6 +25,16 @@ using namespace omt;
 
 namespace sql {
 
+// A fulltext aux/doc_word index build sorts its whole row set (several
+// hundred thousand rows, ~134MB for the 20k-document benchmark), which the
+// automatic work area manager badly underestimates: the sort spills, and
+// spilling costs more than the memory it saves.  Statements that carry an
+// explicit MANULE workarea hint (only the FTS aux/doc_word inner build SQL
+// does) therefore get a fixed 256MB bound for their sort work area: the
+// smallest tested bound that keeps that sort in memory, while a concurrent
+// build still fits comfortably in the tenant memory budget.
+static constexpr int64_t FTS_DDL_SORT_WORK_AREA_SIZE = 256LL * 1024 * 1024;
+
 int ObSqlMemMgrProcessor::init(
   ObIAllocator *allocator,
   int64_t cache_size,
@@ -96,6 +106,11 @@ int ObSqlMemMgrProcessor::init(
       profile_.get_work_area_type(), exec_info, max_mem_size))) {
   }
   if (!profile_.get_auto_policy()) {
+    if (exec_info.get_disable_auto_mem_mgr()
+        && ObSqlWorkAreaType::SORT_WORK_AREA == profile_.get_work_area_type()
+        && max_mem_size < FTS_DDL_SORT_WORK_AREA_SIZE) {
+      max_mem_size = FTS_DDL_SORT_WORK_AREA_SIZE;
+    }
     profile_.set_max_bound(max_mem_size);
   }
   if (OB_SUCC(ret) && nullptr == dummy_alloc_) {
@@ -106,7 +121,10 @@ int ObSqlMemMgrProcessor::init(
   }
   // If sql memory manager is enabled, but the estimated data volume is relatively small, there is no need to register it with the manager, here it is limited to MAX_SQL_MEM_SIZE
   origin_max_mem_size_ = max_mem_size;
-  default_available_mem_size_ = tmp_enable_auto_mem_mgr ? MAX_SQL_MEM_SIZE : max_mem_size;
+  // Explicitly manual plans (the FTS DDL inner build SQL) keep the bound
+  // computed above; everything else keeps the original auto-mode default.
+  default_available_mem_size_ = (tmp_enable_auto_mem_mgr
+      && !exec_info.get_disable_auto_mem_mgr()) ? MAX_SQL_MEM_SIZE : max_mem_size;
   return ret;
 }
 
@@ -193,8 +211,10 @@ int ObSqlMemMgrProcessor::try_upgrade_auto_mgr(ObIAllocator *allocator, int64_t 
   int ret = OB_SUCCESS;
   if (!is_auto_mgr() && OB_NOT_NULL(sql_mem_mgr_)) {
     int64_t max_area_size = max(default_available_mem_size_, MAX_SQL_MEM_SIZE);
-    if (sql_mem_mgr_->enable_auto_memory_mgr()
-        && sql_mem_mgr_->get_global_bound_size() < max_area_size) {
+    if (profile_.get_exec_info().get_disable_auto_mem_mgr()
+        || (sql_mem_mgr_->enable_auto_memory_mgr()
+            && sql_mem_mgr_->get_global_bound_size() < max_area_size)) {
+      // keep the fixed manual bound requested by the MANULE workarea hint
     } else if (OB_FAIL(update_used_mem_size(0))) {
     } else if (OB_FAIL(init(allocator,
                             max_area_size * (EXTEND_RATIO + 100) /100,

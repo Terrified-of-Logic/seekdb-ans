@@ -66,7 +66,7 @@ public:
   const char *get_sql_id() const { return sql_id_; };
   ObSQLSessionInfo *get_my_session() { return my_session_; }
   void reset_my_session() { my_session_ = nullptr; }
-  bool get_disable_auto_mem_mgr() { return disable_auto_mem_mgr_; }
+  bool get_disable_auto_mem_mgr() const { return disable_auto_mem_mgr_; }
 
   TO_STRING_KV(K_(dop), K_(plan_id), K_(exec_id), K_(session_id), K_(db_id), K_(sql_id), K_(disable_auto_mem_mgr));
 

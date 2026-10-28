@@ -22,6 +22,9 @@
 #include "sql/rewrite/ob_expand_aggregate_utils.h"
 #include "sql/pl/ob_pl_resolver.h"
 #include "sql/engine/expr/ob_expr_align_date4cmp.h"
+#include "sql/ob_sql_utils.h"
+#include "sql/resolver/expr/ob_raw_expr_util.h"
+#include "sql/resolver/dml/ob_stmt_expr_visitor.h"
 #include "query/vector/ob_vector_index_util.h"
 
 using namespace oceanbase::common;
@@ -126,6 +129,13 @@ int ObTransformPreProcess::transform_one_stmt(common::ObIArray<ObParentDMLStmt> 
         OPT_TRACE("transform exprs:", is_happened);
       }
     }
+    if (OB_SUCC(ret)) {
+      if (OB_FAIL(fold_const_tokenize_exprs(stmt, is_happened))) {
+      } else {
+        trans_happened |= is_happened;
+        OPT_TRACE("fold constant tokenize exprs:", is_happened);
+      }
+    }
     /*transform_for_nested_aggregate, transformer_aggr_expr two functions are strongly dependent, must ensure the order of rewriting both*/
     if (OB_SUCC(ret)) {
       if (OB_FAIL(transform_for_nested_aggregate(stmt, is_happened))) {
@@ -179,7 +189,7 @@ int ObTransformPreProcess::transform_one_stmt(common::ObIArray<ObParentDMLStmt> 
     }
     if (OB_SUCC(ret)) {
       if (stmt->get_match_exprs().count() > 0 &&
-          OB_FAIL(preserve_order_for_fulltext_search(stmt, is_happened))) {
+          OB_FAIL(preserve_order_for_fulltext_search(parent_stmts, stmt, is_happened))) {
       } else {
         trans_happened |= is_happened;
       }
@@ -1040,6 +1050,112 @@ int ObTransformPreProcess::transform_expr(ObRawExprFactory &expr_factory,
   if (OB_SUCC(ret)) {
     if (OB_FAIL(replace_inner_row_cmp_val_recursively(expr_factory, session,
                                                       expr, trans_happened))) {
+    }
+  }
+  return ret;
+}
+
+// A cached plan is matched by user variable name and type, never by value: the
+// value is read when the statement executes. A value folded into a plan therefore
+// survives a later change of the variable, so TOKENIZE() must not be pre-evaluated
+// when one of its inputs depends on a user variable.
+static bool expr_contains_user_var(const ObRawExpr *expr)
+{
+  bool contains = false;
+  if (OB_ISNULL(expr)) {
+    // nothing to check
+  } else if (T_OP_GET_USER_VAR == expr->get_expr_type()) {
+    contains = true;
+  } else {
+    for (int64_t i = 0; !contains && i < expr->get_param_count(); ++i) {
+      contains = expr_contains_user_var(expr->get_param_expr(i));
+    }
+  }
+  return contains;
+}
+
+// TOKENIZE() over literal arguments is a deterministic expression: its value only
+// depends on the arguments (plus the dictionary state, which is process-wide and
+// immutable while the plan is cached). This optimizer does not constant-fold
+// select-list expressions, so without this pass a repeated literal statement
+// re-runs the whole tokenizer on every execution even though its plan is cached.
+// Fold the result once while planning and let the plan cache reuse the constant.
+int ObTransformPreProcess::fold_const_tokenize_exprs(ObDMLStmt *stmt, bool &trans_happened)
+{
+  int ret = OB_SUCCESS;
+  trans_happened = false;
+  if (OB_ISNULL(stmt) || OB_ISNULL(ctx_) || OB_ISNULL(ctx_->expr_factory_)
+      || OB_ISNULL(ctx_->session_info_) || OB_ISNULL(ctx_->exec_ctx_)) {
+    ret = OB_ERR_UNEXPECTED;
+  } else {
+    // SELECT list items (the common shape of a tokenize/JSON projection). A
+    // tokenize projection does not reference any table, so it is never part of
+    // the relation exprs the transform stage normally rewrites.
+    if (OB_SUCC(ret) && stmt->is_select_stmt()) {
+      ObSelectStmt *select_stmt = static_cast<ObSelectStmt *>(stmt);
+      for (int64_t i = 0; OB_SUCC(ret) && i < select_stmt->get_select_item_size(); ++i) {
+        SelectItem &item = select_stmt->get_select_item(i);
+        bool folded = false;
+        if (OB_ISNULL(item.expr_)) {
+          ret = OB_ERR_UNEXPECTED;
+        } else if (OB_FAIL(fold_const_tokenize_expr(*ctx_->expr_factory_, item.expr_, folded))) {
+        } else if (folded) {
+          trans_happened = true;
+        }
+      }
+    }
+    // Folding is only done for SELECT list items, exactly the place where the
+    // resolver registers the plan-cache const constraints for TOKENIZE arguments.
+    // Relation expressions are deliberately left alone so that every folded
+    // expression has a matching constraint registration scope.
+  }
+  return ret;
+}
+
+int ObTransformPreProcess::fold_const_tokenize_expr(ObRawExprFactory &expr_factory,
+                                                    ObRawExpr *&expr,
+                                                    bool &folded)
+{
+  int ret = OB_SUCCESS;
+  folded = false;
+  if (OB_ISNULL(expr) || OB_ISNULL(ctx_) || OB_ISNULL(ctx_->exec_ctx_)
+      || OB_ISNULL(ctx_->allocator_)) {
+    ret = OB_ERR_UNEXPECTED;
+  } else if (T_FUN_TOKENIZE == expr->get_expr_type()
+             && !expr_contains_user_var(expr)
+             && expr->is_static_scalar_const_expr()
+             && !expr->has_flag(CNT_SUB_QUERY)
+             && !expr->has_flag(CNT_PL_UDF)) {
+    ObObj result;
+    ObConstRawExpr *const_expr = NULL;
+    const ObPhysicalPlanCtx *plan_ctx = ctx_->exec_ctx_->get_physical_plan_ctx();
+    int tmp_ret = OB_ERR_UNEXPECTED;
+    if (OB_ISNULL(plan_ctx)) {
+      tmp_ret = OB_ERR_UNEXPECTED;
+    } else {
+      // force_copy_extend_type = true: the JSON token array is an extended type and
+      // would otherwise stay in the temporary evaluation context and dangle after
+      // this pass, so copy it into the plan's own allocator.
+      tmp_ret = ObSQLUtils::calc_const_expr(ctx_->exec_ctx_->get_my_session(),
+                                            *expr,
+                                            result,
+                                            *ctx_->allocator_,
+                                            plan_ctx->get_param_store(),
+                                            ctx_->exec_ctx_,
+                                            true);
+    }
+    if (OB_SUCCESS != tmp_ret) {
+      // Folding is an optimization: any problem while pre-evaluating (warning,
+      // unsupported value, dictionary not loadable during planning) simply keeps
+      // the normal per-execution evaluation instead of failing the query.
+      LOG_WARN("failed to pre-evaluate constant tokenize expression, keep it", K(tmp_ret));
+    } else if (OB_FAIL(ObRawExprUtils::build_const_obj_expr(expr_factory, result, const_expr))) {
+    } else if (OB_ISNULL(const_expr)) {
+      ret = OB_ERR_UNEXPECTED;
+    } else {
+      const_expr->set_result_type(expr->get_result_type());
+      expr = const_expr;
+      folded = true;
     }
   }
   return ret;
@@ -3790,7 +3906,51 @@ int ObTransformPreProcess::do_flatten_conditions(ObDMLStmt *stmt, ObIArray<ObRaw
 
 // full-text index queries on a single base table are processed with order preservation. 
 // (Order is not preserved in multi-table join scenarios.)
-int ObTransformPreProcess::preserve_order_for_fulltext_search(ObDMLStmt *stmt, bool& trans_happened)
+// A direct COUNT(*) consumer cannot observe either the order or values of a
+// simple view. Keep DISTINCT, aggregates, side effects and column consumers
+// out of this rule: their cardinality or result can depend on those values.
+static bool fts_view_only_counts_rows(const ObIArray<ObParentDMLStmt> &parents,
+                                     const ObDMLStmt *stmt)
+{
+  bool eligible = false;
+  if (!parents.empty() && OB_NOT_NULL(stmt) && stmt->is_select_stmt()
+      && OB_NOT_NULL(parents.at(parents.count()-1).stmt_)
+      && parents.at(parents.count()-1).stmt_->is_select_stmt()) {
+    const ObSelectStmt *parent = static_cast<const ObSelectStmt *>(parents.at(parents.count()-1).stmt_);
+    const ObSelectStmt *view = static_cast<const ObSelectStmt *>(stmt);
+    const TableItem *item = parent->get_table_items().count() == 1 ? parent->get_table_item(0) : nullptr;
+    eligible = OB_NOT_NULL(item) && item->is_generated_table() && item->ref_query_ == view
+        && parent->get_from_item_size() == 1 && parent->get_column_size(item->table_id_) == 0
+        && parent->get_select_item_size() == 1 && parent->get_aggr_item_size() == 1
+        && OB_NOT_NULL(parent->get_aggr_item(0))
+        && parent->get_aggr_item(0)->get_expr_type() == T_FUN_COUNT
+        && parent->get_aggr_item(0)->get_real_param_count() == 0
+        && parent->get_select_item(0).expr_ == parent->get_aggr_item(0)
+        && !parent->is_set_stmt() && !parent->has_distinct() && parent->get_group_expr_size() == 0
+        && !parent->has_rollup() && parent->get_having_exprs().empty()
+        && parent->get_condition_exprs().empty() && parent->get_semi_infos().empty()
+        && !parent->has_window_function() && parent->get_qualify_filters().empty()
+        && !parent->has_order_by() && !parent->has_limit() && !parent->has_for_update()
+        && !parent->is_calc_found_rows() && !parent->is_contains_assignment()
+        && parent->get_subquery_exprs().empty() && parent->get_CTE_table_size() == 0
+        && !view->is_set_stmt() && !view->has_distinct() && !view->has_group_by()
+        && !view->has_rollup() && view->get_aggr_item_size() == 0
+        && view->get_having_exprs().empty() && !view->has_window_function()
+        && view->get_qualify_filters().empty() && !view->has_order_by()
+        && !view->has_for_update() && !view->is_calc_found_rows()
+        && !view->is_fetch_with_ties() && OB_ISNULL(view->get_limit_percent_expr())
+        && !view->is_contains_assignment() && view->get_subquery_exprs().empty()
+        && view->get_CTE_table_size() == 0 && view->get_table_items().count() == 1;
+    for (int64_t i = 0; eligible && i < view->get_select_item_size(); ++i) {
+      const ObRawExpr *expr = view->get_select_item(i).expr_;
+      eligible = OB_NOT_NULL(expr) && (expr->is_column_ref_expr() || expr->is_const_expr());
+    }
+  }
+  return eligible;
+}
+
+int ObTransformPreProcess::preserve_order_for_fulltext_search(
+    const ObIArray<ObParentDMLStmt> &parents, ObDMLStmt *stmt, bool& trans_happened)
 {
   int ret = OB_SUCCESS;
   trans_happened = false;
@@ -3798,6 +3958,16 @@ int ObTransformPreProcess::preserve_order_for_fulltext_search(ObDMLStmt *stmt, b
   ObRawExpr *match_expr = nullptr;
   if (OB_ISNULL(stmt)) {
     ret = OB_ERR_UNEXPECTED;
+  } else if (fts_view_only_counts_rows(parents, stmt)) {
+    ObSelectStmt *view = static_cast<ObSelectStmt *>(stmt);
+    ObConstRawExpr *one = nullptr;
+    if (OB_FAIL(ObRawExprUtils::build_const_int_expr(*ctx_->expr_factory_, ObIntType, 1, one))) {
+    } else {
+      for (int64_t i = 0; i < view->get_select_item_size(); ++i) {
+        view->get_select_item(i).expr_ = one;
+      }
+      trans_happened = true;
+    }
   } else if (stmt->get_table_items().count() != 1 || stmt->get_order_item_size() != 0) {
     // do nothing
   } else if (stmt->is_select_stmt() && 

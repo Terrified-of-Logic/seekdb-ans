@@ -138,7 +138,10 @@ int ObIKFTParser::process_one_char(TokenizeContext &ctx,
   for (ObList<ObIIKProcessor *, ObIAllocator>::iterator iter = segmenters_.begin();
        OB_SUCC(ret) && iter != segmenters_.end();
        iter++) {
-    if (OB_FAIL((*iter)->process(ctx))) {
+    // process_next_batch() has already decoded the current character, so pass the
+    // values down instead of letting every segmenter read them back from the context
+    // again (that was 8 context calls per character).
+    if (OB_FAIL((*iter)->process(ctx, ch, char_len, type))) {
     }
   }
   return ret;
@@ -231,13 +234,6 @@ int ObIKFTParserDesc::get_add_word_flag(ObAddWordFlag &flag) const
 int ObIKFTParser::init_dict(const ObFTParserParam &param)
 {
   int ret = OB_SUCCESS;
-  ObIFTDict *tmp_dict = nullptr;
-
-  if (OB_ISNULL(hub_)) {
-    ret = OB_ERR_UNEXPECTED;
-  }
-
-  ObFTRangeDict *dict = nullptr;
   ObFTDictDesc main_dict_desc("main_dict",
                               ObFTDictType::DICT_IK_MAIN,
                               ObCharsetType::CHARSET_UTF8MB4,
@@ -248,39 +244,23 @@ int ObIKFTParser::init_dict(const ObFTParserParam &param)
                               ObCharsetType::CHARSET_UTF8MB4,
                               ObCollationType::CS_TYPE_UTF8MB4_BIN);
 
-  ObFTDictDesc stopword_dict_desc("stopword",
-                                  ObFTDictType::DICT_IK_STOP,
-                                  ObCharsetType::CHARSET_UTF8MB4,
-                                  ObCollationType::CS_TYPE_UTF8MB4_BIN);
-
-  if (should_read_newest_table()) {
-    // clear dict cache, always false now
+  if (OB_ISNULL(hub_)) {
+    ret = OB_ERR_UNEXPECTED;
+  } else if (should_read_newest_table()) {
+    // The shared dictionaries are immutable process level objects, so a refresh of the
+    // built-in dictionaries (DDL on the __all_fts_dictionary_* tables) is not visible
+    // to them. should_read_newest_table() is a constant false for now, so this
+    // limitation is accepted explicitly instead of silently producing an inconsistent
+    // dictionary view.
+  } else if (OB_FAIL(hub_->acquire_ik_dicts(main_dict_desc,
+                                            quan_dict_desc,
+                                            dict_main_,
+                                            dict_quan_))) {
   } else {
-    if (OB_FAIL(init_single_dict(main_dict_desc, cache_main_))) {
-    } else if (OB_FAIL(init_single_dict(quan_dict_desc, cache_quan_))) {
-    } else if (OB_FAIL(init_single_dict(stopword_dict_desc, cache_stop_))) {
-    }
-  }
-
-  if (OB_FAIL(ret)) {
-    // already logged.
-  } else if (OB_FAIL(build_dict_from_cache(main_dict_desc, cache_main_, dict_main_))) {
-  } else if (OB_FAIL(build_dict_from_cache(quan_dict_desc, cache_quan_, dict_quan_))) {
-  } else if (OB_FAIL(build_dict_from_cache(stopword_dict_desc, cache_stop_, dict_stop_))) {
-  }
-
-  return ret;
-}
-
-int ObIKFTParser::init_single_dict(ObFTDictDesc desc, ObFTCacheRangeContainer &container)
-{
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(hub_->load_cache(desc, container))) {
-    if (OB_ENTRY_NOT_EXIST == ret) {
-      if (OB_FAIL(hub_->build_cache(desc, container))) {
-      }
-    } else {
-    }
+    // dict_stop_ is not acquired on purpose: the IK tokenizer never uses the stopword
+    // dictionary view (the only use in get_next_token() is commented out), so building
+    // and sharing it would be pure overhead.
+    dict_acquired_ = true;
   }
   return ret;
 }
@@ -303,6 +283,7 @@ int ObIKFTParser::init_ctx(const ObFTParserParam &param)
   }
   if (OB_FAIL(ret)) {
     OB_DELETEx(TokenizeContext, &allocator_, ctx_);
+    ctx_ = nullptr;
   }
   return ret;
 }
@@ -352,6 +333,7 @@ void ObIKFTParser::reset()
   if (!OB_ISNULL(ctx_)) {
     ctx_->~TokenizeContext();
     allocator_.free(ctx_);
+    ctx_ = nullptr;
   }
 
   for (ObIIKProcessor *segmenter : segmenters_) {
@@ -362,43 +344,26 @@ void ObIKFTParser::reset()
   }
   segmenters_.clear();
 
-  cache_main_.reset();
-  cache_quan_.reset();
-  cache_stop_.reset();
-
-  if (!OB_ISNULL(dict_main_)) {
-    dict_main_->~ObIFTDict();
-    allocator_.free(dict_main_);
+  // The dictionaries are owned by the hub and shared by every parser of this process:
+  // never destroy them here, only drop the holder reference. Only the pointers are
+  // reset, so that reset() stays idempotent (init() calls it on failure and the
+  // destructor calls it again).
+  if (dict_acquired_ && OB_NOT_NULL(hub_)) {
+    int ret = hub_->release_ik_dicts();
+    if (OB_SUCCESS != ret) {
+      LOG_WARN("failed to release shared fts dictionaries", K(ret));
+    }
+    dict_acquired_ = false;
   }
-  if (!OB_ISNULL(dict_quan_)) {
-    dict_quan_->~ObIFTDict();
-    allocator_.free(dict_quan_);
-  }
-  if (!OB_ISNULL(dict_stop_)) {
-    dict_stop_->~ObIFTDict();
-    allocator_.free(dict_stop_);
-  }
+  dict_main_ = nullptr;
+  dict_quan_ = nullptr;
 
   is_inited_ = false;
 }
 
+// Always false: the shared dictionaries are built once per process and never
+// refreshed, see the note in init_dict().
 bool ObIKFTParser::should_read_newest_table() const { return false; }
-int ObIKFTParser::build_dict_from_cache(const ObFTDictDesc &desc,
-                                        ObFTCacheRangeContainer &container,
-                                        ObIFTDict *&dict)
-{
-  int ret = OB_SUCCESS;
-  if (OB_ISNULL(hub_)) {
-    ret = OB_ERR_UNEXPECTED;
-  } else if (OB_ISNULL(dict = OB_NEWx(ObFTRangeDict, &allocator_, allocator_, &container, desc))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-  } else if (OB_FAIL(dict->init())) {
-  }
-  if (OB_FAIL(ret)) {
-    OB_DELETEx(ObIFTDict, &allocator_, dict);
-  }
-  return ret;
-}
 
 } //  namespace storage
 } //  namespace oceanbase

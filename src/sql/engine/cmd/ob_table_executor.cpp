@@ -786,6 +786,7 @@ int ObAlterTableExecutor::execute(ObExecContext &ctx, ObAlterTableStmt &stmt)
       } else if (FALSE_IT(alter_table_arg.sql_mode_ = my_session->get_sql_mode())) {
         // do nothing
       } else if (FALSE_IT(alter_table_arg.parallelism_ = stmt.get_parallelism())) {
+      } else if (FALSE_IT(alter_table_arg.is_parallelism_explicit_ = stmt.get_has_parallel_hint())) {
       } else if (OB_FAIL(check_alter_partition(ctx, stmt, alter_table_arg))) {
       } else if (OB_FAIL(check_alter_part_key(ctx, alter_table_arg))) {
       } else if (OB_FAIL(set_index_arg_list(ctx, stmt))) {
@@ -1423,6 +1424,7 @@ int ObAlterTableExecutor::set_index_arg_list(ObExecContext &ctx, ObAlterTableStm
       } else {
         create_index_arg.is_inner_ = my_session->is_inner();
         if (OB_FAIL(create_index_arg.assign(index_stmt.get_create_index_arg()))) {
+        } else if (FALSE_IT(create_index_arg.is_parallelism_explicit_ = stmt.get_has_parallel_hint())) {
         } else if (OB_FAIL(alter_table_arg.index_arg_list_.push_back(&create_index_arg))) {
         }
       }
