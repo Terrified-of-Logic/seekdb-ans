@@ -24,10 +24,11 @@ The serialized HNSW record order is not the staged row order, so the parent
 validates records through a label-to-input-row map and a linear byte comparison
 instead of one random graph lookup per row. The helper rewrites all labels
 through a single `mmap` and skips library teardown with `_Exit` after the graph
-is synced. It also pins itself to at most 16 allowed CPUs: when a container is
-allowed far more CPUs than its cgroup quota, unpinned host-side NN-Descent
-bookkeeping is several times slower due to NUMA scattering (measured 0.60 s
-pinned versus 2.4 s unpinned for 20,000 rows).
+is synced. It also reads the cgroup CPU quota and pins itself to a compact set of
+that size when the allowed CPU set is larger, because unpinned host-side
+NN-Descent bookkeeping then scatters across NUMA domains (measured 0.60 s pinned
+versus 2.4 s unpinned for 20,000 rows). The sparse upper-layer build uses at most
+16 threads, capped by the same budget.
 
 The helper uses AMD hipVS CAGRA NN-Descent for the base graph, synchronizes the
 GPU, converts to hierarchical HNSW using CPU upper-layer construction, serializes

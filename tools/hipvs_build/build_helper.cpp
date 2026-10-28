@@ -65,14 +65,40 @@ struct Resources {
 // is allowed far more CPUs than its cgroup quota, unpinned worker threads get
 // scattered across NUMA domains and the host phase becomes several times
 // slower. Keep the process on a compact set of at most 16 allowed CPUs.
-static void compact_affinity()
+static int cgroup_cpu_quota()
+{
+  std::ifstream v2("/sys/fs/cgroup/cpu.max");
+  std::string quota;
+  std::string period;
+  if (v2 >> quota >> period) {
+    if (quota == "max") { return 0; }
+    const long q = std::strtol(quota.c_str(), nullptr, 10);
+    const long p = std::strtol(period.c_str(), nullptr, 10);
+    if (q > 0 && p > 0) { return static_cast<int>(std::max(1L, q / p)); }
+    return 0;
+  }
+  std::ifstream q1("/sys/fs/cgroup/cpu/cpu.cfs_quota_us");
+  std::ifstream p1("/sys/fs/cgroup/cpu/cpu.cfs_period_us");
+  long q = -1;
+  long p = 100000;
+  if (q1 >> q && p1 >> p && q > 0 && p > 0) {
+    return static_cast<int>(std::max(1L, q / p));
+  }
+  return 0;
+}
+
+// Returns the effective CPU budget. Pinning only happens when the container is
+// allowed more CPUs than its cgroup quota, which is the NUMA-scattering case.
+static int compact_affinity()
 {
   cpu_set_t allowed;
   CPU_ZERO(&allowed);
-  if (sched_getaffinity(0, sizeof(allowed), &allowed) != 0) { return; }
+  if (sched_getaffinity(0, sizeof(allowed), &allowed) != 0) { return 0; }
   const int allowed_count = CPU_COUNT(&allowed);
-  const int target = std::min(allowed_count, 16);
-  if (allowed_count <= target) { return; }
+  const int quota = cgroup_cpu_quota();
+  int target = allowed_count;
+  if (quota > 0 && quota < target) { target = quota; }
+  if (target >= allowed_count) { return allowed_count; }
   cpu_set_t chosen;
   CPU_ZERO(&chosen);
   int added = 0;
@@ -82,12 +108,15 @@ static void compact_affinity()
       ++added;
     }
   }
-  if (added == target) { sched_setaffinity(0, sizeof(chosen), &chosen); }
+  if (added == target && sched_setaffinity(0, sizeof(chosen), &chosen) == 0) {
+    return target;
+  }
+  return allowed_count;
 }
 
 int main(int argc, char **argv)
 {
-  compact_affinity();
+  const int cpu_budget = compact_affinity();
   const double process_start = now_ms();
   try {
     const bool wait_for_parent = argc == 4 && std::strcmp(argv[3], "--wait-stdin") == 0;
@@ -169,7 +198,8 @@ int main(int argc, char **argv)
     check(cuvsHnswIndexParamsCreate(&r.hp));
     r.hp->hierarchy = CPU; // GPU builds the base graph; CPU constructs only the sparse upper levels.
     r.hp->ef_construction = static_cast<int>(head[4]);
-    r.hp->num_threads = env_int("HIPVS_HNSW_THREADS", 16);
+    r.hp->num_threads = env_int("HIPVS_HNSW_THREADS",
+        cpu_budget > 0 ? std::min(16, cpu_budget) : 16);
     check(cuvsHnswFromCagra(r.res, r.hp, r.graph, r.hnsw));
     check(cuvsHnswSerialize(r.res, argv[2], r.hnsw));
     const double serialize_done = now_ms();
