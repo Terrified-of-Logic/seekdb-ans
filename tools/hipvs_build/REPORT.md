@@ -22,7 +22,7 @@
 2. **父进程线性校验**：原生序列化不保留 staging 行序，原实现对“第 i 行标签 == 第 i 个输入 id”的假设不成立。改为 `label → 输入行` 映射 + 逐行 vector 字节比较，并保留 3 个原生 `CalcDistanceById` 抽样探针；50K 校验 3 ms。
 3. **helper mmap 标签重写 + 排序查重**：一次 `mmap` 重写全部 label，替代逐行 seek/read/seek；用排序代替 `std::set` 去重。
 4. **helper 配额感知自绑核**：容器允许 CPU 数远大于 cgroup 配额时，未绑核的 host 侧 NN-Descent 记账会跨 NUMA 分散。实测 20K helper 未绑核 2.4 s、绑核/自绑核 0.60 s。helper 现在启动时读取 cgroup CPU 配额，在允许 CPU 集更大时自绑到配额大小的紧凑集合（本轮 16 核），上层构建线程数取 `min(16, 配额)`。
-5. **跳过退出析构**：图文件 `msync` 并关闭后 `_Exit(0)`，不把 cuVS/hnswlib 析构计入构建。
+5. **跳过退出析构**：图文件 `msync` 并关闭后 `std::exit(0)`，跳过 cuVS/hnswlib 自动析构，但保留 atexit，rocprofv3 等 profiler 仍能正常落盘。
 6. 新增 `HIPVS_HELPER_LOG` / `HIPVS_PARENT_TIMINGS` / `HIPVS_SNAPSHOT_FINISH` 阶段日志、可调参数（`HIPVS_CAGRA_*`、`HIPVS_SNAPSHOT_PREWARM`、`HIPVS_HNSW_THREADS`）、无 GPU 的协议测试 `test_fake_helper.py` 与标签重写单测 `test_hnsw_labels.cpp`。
 
 ### 阶段耗时（50K GPU，单轮典型值）

@@ -23,8 +23,9 @@ filters and incremental DML then apply to the result.
 The serialized HNSW record order is not the staged row order, so the parent
 validates records through a label-to-input-row map and a linear byte comparison
 instead of one random graph lookup per row. The helper rewrites all labels
-through a single `mmap` and skips library teardown with `_Exit` after the graph
-is synced. It also reads the cgroup CPU quota and pins itself to a compact set of
+through a single `mmap` and skips automatic library teardown with `std::exit`
+once the graph is synced; atexit handlers still run, so profilers can flush their
+traces. It also reads the cgroup CPU quota and pins itself to a compact set of
 that size when the allowed CPU set is larger, because unpinned host-side
 NN-Descent bookkeeping then scatters across NUMA domains (measured 0.60 s pinned
 versus 2.4 s unpinned for 20,000 rows). The sparse upper-layer build uses at most
@@ -55,7 +56,7 @@ and quality.
 | --- | --- | --- |
 | `SEEKDB_HIPVS_BUILD_HELPER` | unset | absolute path to the trusted helper; unset keeps the CPU path |
 | `HIPVS_SNAPSHOT_PREWARM` | `1` | start the helper on the first staged batch |
-| `HIPVS_CAGRA_BUILD_ALGO` | `nn_descent` | `nn_descent` or `ivf_pq` |
+| `HIPVS_CAGRA_BUILD_ALGO` | `nn_descent` | `nn_descent`, `ivf_pq`, `iterative` or `auto` |
 | `HIPVS_CAGRA_NITER` | `20` | NN-Descent iterations |
 | `HIPVS_CAGRA_INTERMEDIATE_DEGREE` | `4*M` | intermediate graph degree (must be >= 2*M) |
 | `HIPVS_HNSW_THREADS` | `16` | CPU threads for the sparse upper-layer construction |

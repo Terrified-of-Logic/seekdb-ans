@@ -179,8 +179,15 @@ int main(int argc, char **argv)
     r.params->intermediate_graph_degree =
         std::max<int>(r.params->graph_degree, env_int("HIPVS_CAGRA_INTERMEDIATE_DEGREE", 4 * m));
     const char *build_algo = std::getenv("HIPVS_CAGRA_BUILD_ALGO");
-    r.params->build_algo = (build_algo != nullptr && std::strcmp(build_algo, "ivf_pq") == 0)
-        ? IVF_PQ : NN_DESCENT;
+    if (build_algo != nullptr && std::strcmp(build_algo, "ivf_pq") == 0) {
+      r.params->build_algo = IVF_PQ;
+    } else if (build_algo != nullptr && std::strcmp(build_algo, "iterative") == 0) {
+      r.params->build_algo = ITERATIVE_CAGRA_SEARCH;
+    } else if (build_algo != nullptr && std::strcmp(build_algo, "auto") == 0) {
+      r.params->build_algo = AUTO_SELECT;
+    } else {
+      r.params->build_algo = NN_DESCENT;
+    }
     r.params->nn_descent_niter = env_int("HIPVS_CAGRA_NITER", 20);
     int64_t shape[] = {static_cast<int64_t>(n), static_cast<int64_t>(dim)};
     DLManagedTensor tensor {};
@@ -225,10 +232,11 @@ int main(int argc, char **argv)
               << " convert_ms=" << (serialize_done - cagra_done)
               << " rewrite_ms=" << (rewrite_done - serialize_done)
               << " fallback=false\n";
-    // The graph file is already synced and closed. Skipping cuVS/hnswlib
-    // teardown keeps destructor work out of the measured build.
+    // The graph file is already synced and closed. std::exit skips automatic
+    // cuVS/hnswlib teardown but still runs atexit handlers, so profilers such
+    // as rocprofv3 can flush their traces.
     std::cerr.flush();
-    std::_Exit(0);
+    std::exit(0);
   } catch (const std::exception &e) {
     std::cerr << "HIPVS_GPU_BUILD_FAILED fallback=false error=" << e.what() << '\n';
     return 1;
