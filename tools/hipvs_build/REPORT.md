@@ -1,5 +1,59 @@
 # AMD 题实现与实测报告
 
+## 2026-10-28 优化轮（当前实现）
+
+日期：2026-10-28（Asia/Shanghai）。状态：实现完成，在稳定 AMD 实例（与 2026-10-27 同型号、同配额）上通过完整 CPU/GPU A/B、重开与故障回退验证；尚未提测。以下数据取代 2026-10-27 基线轮。
+
+### 结果
+
+| 数据量 / 维度 | 双方 ef_search | CPU 构建中位数 | hipVS 构建中位数 | 端到端加速 | CPU Recall@10 | GPU Recall@10（三轮范围） |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| 20,000 × 128 | 512 | 5.385515 s | 1.473770 s | **3.654×** | 0.982 | 0.994–0.996 |
+| 50,000 × 128 | 1024 | 16.175219 s | 2.093661 s | **7.726×** | 0.973 | 0.991–0.992 |
+| 100,000 × 128（参考） | 1024 / 2048 | 39.96 s | 3.15 s | 12.7× | 0.927 | 0.938–0.939 |
+
+20K/50K 各 3 轮，起点为已导入数据、索引尚不存在时发出 `CREATE VECTOR INDEX`，终点为首条可用 APPROXIMATE 查询；四组各通过 421 项脚本检查，重开 Recall 分别 0.982/0.994（20K）与 0.973/0.991（50K）。100K 只跑一轮，且 CPU/GPU 都未达到本地 0.95 线（提高 ef_search 到 2048 也基本不变，说明是 M=16/ef_construction=200 在该合成数据上的图质量上限），因此只作为“数据量增大时 GPU 优势扩大”的趋势参考，不作为合格质量结果。
+
+与 2026-10-27 基线轮相比（同一机器形态、同一套测量脚本），20K 加速 3.228×→3.654×（+13.2%），50K 6.923×→7.726×（+11.6%），Recall 不降。
+
+### 本轮改动
+
+1. **helper 预启动与扫描重叠**：首批 staging 数据到达时即 `posix_spawn` helper，helper 完成 ROCm/hipVS 初始化后在 stdin 上等待；扫描结束后父进程写输入、发一个字节启动。初始化不再落在构建关键路径上（日志 `prestarted=1`，helper `wait_ms≈0.01`）。
+2. **父进程线性校验**：原生序列化不保留 staging 行序，原实现对“第 i 行标签 == 第 i 个输入 id”的假设不成立。改为 `label → 输入行` 映射 + 逐行 vector 字节比较，并保留 3 个原生 `CalcDistanceById` 抽样探针；50K 校验 3 ms。
+3. **helper mmap 标签重写 + 排序查重**：一次 `mmap` 重写全部 label，替代逐行 seek/read/seek；用排序代替 `std::set` 去重。
+4. **helper 自绑核**：容器允许 CPU 数远大于 cgroup 配额时，未绑核的 host 侧 NN-Descent 记账会跨 NUMA 分散。实测 20K helper 未绑核 2.4 s、绑核/自绑核 0.60 s。helper 现在启动时自绑到至多 16 个允许 CPU。
+5. **跳过退出析构**：图文件 `msync` 并关闭后 `_Exit(0)`，不把 cuVS/hnswlib 析构计入构建。
+6. 新增 `HIPVS_HELPER_LOG` / `HIPVS_PARENT_TIMINGS` / `HIPVS_SNAPSHOT_FINISH` 阶段日志、可调参数（`HIPVS_CAGRA_*`、`HIPVS_SNAPSHOT_PREWARM`、`HIPVS_HNSW_THREADS`）、无 GPU 的协议测试 `test_fake_helper.py` 与标签重写单测 `test_hnsw_labels.cpp`。
+
+### 阶段耗时（50K GPU，单轮典型值）
+
+- helper：总 1.01 s = init 79 ms + load 19 ms + CAGRA 695 ms + HNSW 转换 212 ms + label 重写 3.5 ms。
+- 父进程：写输入 10–18 ms、等待 helper 1.05–1.15 s、读回 17–19 ms、线性校验 3 ms、VSAG 导入 24 ms，合计 1.12–1.22 s。
+- 端到端 2.09 s 中其余约 0.9 s 是扫描、快照序列化/发布与首查，与 CPU 路径共同承担。
+
+### 验证
+
+- 单测：`test_hnsw_labels.cpp` 通过（标签重写、重复标签、截断、id 数量不符四项拒绝路径）。
+- 协议测试：`--helper test_fake_helper.py` 下父进程预启动、握手、写文件、线性校验、导入失败、显式 CPU 回退均按预期执行，查询 100/100 命中。
+- 失败注入：`/bin/false` 明确记录 `HIPVS_CPU_FALLBACK reason=gpu_build_failed`，16 项检查通过、Recall 1.0，排除在 GPU 性能之外。
+- 完整套件：20K/50K CPU/GPU 各 3 轮、重开不重复构图、过滤/DML/小表/NULL/空索引全部通过（每组 421 项）。
+- 未绑核环境：20K GPU 端到端 1.597 s（新 helper 自绑核）与本机绑核结果相当。
+
+### 环境与产物
+
+- 实例：AMD EPYC 9334、cgroup 16 CPU、55 GiB，Radeon gfx1100 96 CU、ROCm 7.2.4。
+- seekdb 版本 `5.7.25-OceanBase seekdb-v1.4.0.0`，二进制 SHA-256 `1844181e4a65b49448d1c1f2cfdd8d70d7b940705615b1c9531744e3b994e6b1`；helper SHA-256 `987ca3bdeb9e5a710ce234d1c938bd396703d587c3b549eaaed47838db33baf3`。
+- 本轮全部源码改动、复现脚本和证据在 `tools/hipvs_build/`。
+
+### 限制
+
+- 未创建公开 PR、未上传评测平台、未取得官方评分；官方数据规模/目标倍数/Recall 门槛仍未公布。
+- 100K 合成数据在 M=16/ef_construction=200 下 Recall 不足 0.95，属于索引参数与数据分布问题，CPU/GPU 同样受影响；未宣称该点合格。
+- 低 niter / IVF_PQ 可继续缩短 helper（实测 50K niter=10/inter=32 端到端 2.01 s、Recall 0.983；IVF_PQ 2.72 s、Recall 0.975），但默认仍保持 NN-Descent niter=20，以不牺牲质量；参数说明见 `README.md`。
+- 仅在单机 gfx1100、L2、float32、128 维和上述合成数据上验证。
+
+---
+
 日期：2026-10-27（Asia/Shanghai）。状态：**实现完成，真实 AMD 实例本地验证通过；尚未创建公开 PR 或进行比赛平台提测。**
 
 ## 结果

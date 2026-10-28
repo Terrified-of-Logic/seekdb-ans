@@ -11,11 +11,23 @@ extra-info columns. Unset it for the unchanged CPU baseline. Incremental handles
 other metrics and quantized indexes keep their existing CPU implementation.
 
 Snapshot scans append vectors and their internal VIDs into a bounded staging
-buffer instead of calling VSAG `Add` for every batch. Before the snapshot key
-prefix is published, seekdb executes the helper with `posix_spawn`, waits for it,
-imports its complete graph through the native VSAG `BinarySet` interface, and
-validates the count and every original VID/vector association. Existing native
-serialization, reload, filters and incremental DML then apply to the result.
+buffer instead of calling VSAG `Add` for every batch. The helper is spawned on
+the first staged batch and blocks on a one-byte start signal until the scan has
+staged every vector, so ROCm/hipVS process initialization overlaps the scan
+instead of extending the build. Before the snapshot key prefix is published,
+seekdb finishes writing the input, releases the helper, imports its complete
+graph through the native VSAG `BinarySet` interface, and validates the count and
+every stored label/vector association. Existing native serialization, reload,
+filters and incremental DML then apply to the result.
+
+The serialized HNSW record order is not the staged row order, so the parent
+validates records through a label-to-input-row map and a linear byte comparison
+instead of one random graph lookup per row. The helper rewrites all labels
+through a single `mmap` and skips library teardown with `_Exit` after the graph
+is synced. It also pins itself to at most 16 allowed CPUs: when a container is
+allowed far more CPUs than its cgroup quota, unpinned host-side NN-Descent
+bookkeeping is several times slower due to NUMA scattering (measured 0.60 s
+pinned versus 2.4 s unpinned for 20,000 rows).
 
 The helper uses AMD hipVS CAGRA NN-Descent for the base graph, synchronizes the
 GPU, converts to hierarchical HNSW using CPU upper-layer construction, serializes
@@ -32,6 +44,27 @@ explicitly emit `HIPVS_CPU_FALLBACK reason=small_snapshot` and use CPU construct
 These cases must be excluded from GPU performance claims. Staging is limited to
 1 GiB of vector data. The helper has a 300-second timeout. The default tested
 parameters are `M=16`, `ef_construction=200`, `ef_search=512`.
+
+### Tuning and test switches
+
+All switches are optional; unset values reproduce the default NN-Descent build
+and quality.
+
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `SEEKDB_HIPVS_BUILD_HELPER` | unset | absolute path to the trusted helper; unset keeps the CPU path |
+| `HIPVS_SNAPSHOT_PREWARM` | `1` | start the helper on the first staged batch |
+| `HIPVS_CAGRA_BUILD_ALGO` | `nn_descent` | `nn_descent` or `ivf_pq` |
+| `HIPVS_CAGRA_NITER` | `20` | NN-Descent iterations |
+| `HIPVS_CAGRA_INTERMEDIATE_DEGREE` | `4*M` | intermediate graph degree (must be >= 2*M) |
+| `HIPVS_HNSW_THREADS` | `16` | CPU threads for the sparse upper-layer construction |
+
+Lower `HIPVS_CAGRA_NITER`/`INTERMEDIATE_DEGREE` shorten the build and can reduce
+recall; measure both against the official quality threshold before changing the
+default. `eval_recall.cpp` reports Recall@10 directly from a serialized graph
+without seekdb, and `test_fake_helper.py` exercises the parent protocol
+(pre-start, handshake, file layout validation, explicit CPU fallback) without an
+AMD GPU.
 
 ## Build
 
@@ -125,9 +158,20 @@ rocprofv3 --kernel-trace --memory-copy-trace --stats --output-format csv \
 
 The helper success line `HIPVS_GPU_BUILD_SUCCESS ... fallback=false` establishes
 its completion; seekdb's `HIPVS_NATIVE_BUILD_COMPLETE fallback=false` establishes
-successful native import. Retain the kernel/memory-copy CSV files as independent
-GPU evidence. Neither helper-only time nor the packaged Notebook's batch-query
-speedup is the contest's end-to-end build speedup.
+successful native import. `HIPVS_HELPER_LOG` forwards the helper phases
+(`init/load/cagra/convert/rewrite`) into the server log, and
+`HIPVS_PARENT_TIMINGS` reports the parent's write/wait/read/validate/import
+breakdown, so the end-to-end time can be attributed without a profiler. Retain
+the kernel/memory-copy CSV files as independent GPU evidence. Neither helper-only
+time nor the packaged Notebook's batch-query speedup is the contest's end-to-end
+build speedup.
+
+Unit test for the label rewrite (no GPU required):
+
+```bash
+g++ -std=c++17 -O2 tools/hipvs_build/test_hnsw_labels.cpp -o /tmp/test_hnsw_labels
+/tmp/test_hnsw_labels
+```
 
 API references:
 [AMD hipVS HNSW](https://rocm.docs.amd.com/projects/hipVS/en/latest/reference/cpp_api/neighbors_hnsw.html),

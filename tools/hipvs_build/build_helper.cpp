@@ -1,21 +1,50 @@
 /* Copyright (c) 2026 OceanBase. Licensed under the Apache License, Version 2.0. */
 // hipVS C API deliberately retains cuVS symbol names on AMD ROCm.
+//
+// The helper is normally spawned when the first snapshot batch arrives and is
+// kept blocked on stdin until the parent has finished staging every vector.
+// That lets ROCm/hipVS process initialization overlap the SQL snapshot scan;
+// all graph construction still happens inside the measured build window.
 #include <cuvs/neighbors/cagra.h>
 #include <cuvs/neighbors/hnsw.h>
 #include <hip/hip_runtime.h>
+#include <sched.h>
+#include <unistd.h>
 #include <algorithm>
+#include <cerrno>
 #include <chrono>
 #include <cmath>
+#include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <fstream>
 #include <iostream>
-#include <set>
 #include <stdexcept>
 #include <vector>
 
-static void check(cuvsError_t result) {
+#include "hnsw_labels.h"
+
+static double now_ms()
+{
+  return std::chrono::duration<double, std::milli>(
+      std::chrono::steady_clock::now().time_since_epoch()).count();
+}
+
+static int env_int(const char *name, int fallback)
+{
+  const char *text = std::getenv(name);
+  if (text == nullptr || *text == '\0') { return fallback; }
+  char *end = nullptr;
+  const long value = std::strtol(text, &end, 10);
+  if (end == text || *end != '\0' || value < 0 || value > 1000000) { return fallback; }
+  return static_cast<int>(value);
+}
+
+static void check(cuvsError_t result)
+{
   if (result != CUVS_SUCCESS) { throw std::runtime_error(cuvsGetLastErrorText()); }
 }
+
 struct Resources {
   cuvsResources_t res{};
   cuvsCagraIndex_t graph = nullptr;
@@ -31,12 +60,66 @@ struct Resources {
     cuvsResourcesDestroy(res);
   }
 };
-int main(int argc, char **argv) {
+
+// Host-side NN-descent bookkeeping is memory-latency bound. When the container
+// is allowed far more CPUs than its cgroup quota, unpinned worker threads get
+// scattered across NUMA domains and the host phase becomes several times
+// slower. Keep the process on a compact set of at most 16 allowed CPUs.
+static void compact_affinity()
+{
+  cpu_set_t allowed;
+  CPU_ZERO(&allowed);
+  if (sched_getaffinity(0, sizeof(allowed), &allowed) != 0) { return; }
+  const int allowed_count = CPU_COUNT(&allowed);
+  const int target = std::min(allowed_count, 16);
+  if (allowed_count <= target) { return; }
+  cpu_set_t chosen;
+  CPU_ZERO(&chosen);
+  int added = 0;
+  for (int cpu = 0; cpu < CPU_SETSIZE && added < target; ++cpu) {
+    if (CPU_ISSET(cpu, &allowed)) {
+      CPU_SET(cpu, &chosen);
+      ++added;
+    }
+  }
+  if (added == target) { sched_setaffinity(0, sizeof(chosen), &chosen); }
+}
+
+int main(int argc, char **argv)
+{
+  compact_affinity();
+  const double process_start = now_ms();
   try {
-    if (argc != 3) throw std::runtime_error("usage: hipvs-build-helper INPUT OUTPUT");
-    const auto start = std::chrono::steady_clock::now();
+    const bool wait_for_parent = argc == 4 && std::strcmp(argv[3], "--wait-stdin") == 0;
+    if (argc != 3 && !wait_for_parent) {
+      throw std::runtime_error("usage: hipvs-build-helper INPUT OUTPUT [--wait-stdin]");
+    }
+    int devices = 0;
+    if (hipGetDeviceCount(&devices) != hipSuccess || devices < 1) {
+      throw std::runtime_error("no AMD GPU");
+    }
+    hipDeviceProp_t prop {};
+    if (hipGetDeviceProperties(&prop, 0) != hipSuccess) {
+      throw std::runtime_error("GPU properties failed");
+    }
+    // Initialize the GPU runtime before the snapshot scan completes. This is
+    // process/driver setup only; no vector or graph work is done here.
+    Resources r;
+    const double init_done = now_ms();
+    double wait_ms = 0;
+    if (wait_for_parent) {
+      const double wait_begin = now_ms();
+      char start = 0;
+      ssize_t got = 0;
+      do {
+        got = ::read(STDIN_FILENO, &start, 1);
+      } while (got < 0 && errno == EINTR);
+      if (got != 1 || start != 'B') { throw std::runtime_error("parent did not start the build"); }
+      wait_ms = now_ms() - wait_begin;
+    }
+    const double load_begin = now_ms();
     std::ifstream input(argv[1], std::ios::binary);
-    uint64_t head[5]{};
+    uint64_t head[5] {};
     input.read(reinterpret_cast<char *>(head), sizeof(head));
     const uint64_t n = head[1], dim = head[2], m = head[3];
     if (!input || head[0] != 0x315350564849ULL || dim == 0 || dim > 4096 ||
@@ -47,64 +130,75 @@ int main(int argc, char **argv) {
     std::vector<float> data(n * dim);
     input.read(reinterpret_cast<char *>(ids.data()), ids.size() * sizeof(int64_t));
     input.read(reinterpret_cast<char *>(data.data()), data.size() * sizeof(float));
-    if (!input || input.peek() != EOF || std::set<int64_t>(ids.begin(), ids.end()).size() != n)
-      throw std::runtime_error("truncated input or duplicate VID");
-    for (float value : data) if (!std::isfinite(value)) throw std::runtime_error("nonfinite vector");
-    int devices = 0;
-    if (hipGetDeviceCount(&devices) != hipSuccess || devices < 1) throw std::runtime_error("no AMD GPU");
-    hipDeviceProp_t prop{};
-    if (hipGetDeviceProperties(&prop, 0) != hipSuccess) throw std::runtime_error("GPU properties failed");
-    Resources r;
+    if (!input || input.peek() != EOF) { throw std::runtime_error("truncated input"); }
+    std::vector<int64_t> sorted_ids(ids);
+    std::sort(sorted_ids.begin(), sorted_ids.end());
+    if (std::adjacent_find(sorted_ids.begin(), sorted_ids.end()) != sorted_ids.end()) {
+      throw std::runtime_error("duplicate VID");
+    }
+    for (float value : data) {
+      if (!std::isfinite(value)) { throw std::runtime_error("nonfinite vector"); }
+    }
+    const double load_done = now_ms();
+
     check(cuvsCagraIndexCreate(&r.graph));
     check(cuvsCagraIndexParamsCreate(&r.params));
     r.params->metric = L2Expanded;
     r.params->graph_degree = 2 * m;
-    r.params->intermediate_graph_degree = 4 * m;
-    r.params->build_algo = NN_DESCENT;
-    r.params->nn_descent_niter = 20;
+    // 4*m is the default intermediate degree; the override exists only for
+    // controlled build-throughput experiments, never to weaken HNSW degree.
+    r.params->intermediate_graph_degree =
+        std::max<int>(r.params->graph_degree, env_int("HIPVS_CAGRA_INTERMEDIATE_DEGREE", 4 * m));
+    const char *build_algo = std::getenv("HIPVS_CAGRA_BUILD_ALGO");
+    r.params->build_algo = (build_algo != nullptr && std::strcmp(build_algo, "ivf_pq") == 0)
+        ? IVF_PQ : NN_DESCENT;
+    r.params->nn_descent_niter = env_int("HIPVS_CAGRA_NITER", 20);
     int64_t shape[] = {static_cast<int64_t>(n), static_cast<int64_t>(dim)};
-    DLManagedTensor tensor{};
+    DLManagedTensor tensor {};
     tensor.dl_tensor.data = data.data();
     tensor.dl_tensor.device = {kDLCPU, 0};
     tensor.dl_tensor.ndim = 2;
     tensor.dl_tensor.dtype = {kDLFloat, 32, 1};
     tensor.dl_tensor.shape = shape;
+    const double cagra_begin = now_ms();
     check(cuvsCagraBuild(r.res, r.params, &tensor, r.graph));
-    if (hipDeviceSynchronize() != hipSuccess) throw std::runtime_error("GPU sync failed");
+    if (hipDeviceSynchronize() != hipSuccess) { throw std::runtime_error("GPU sync failed"); }
+    const double cagra_done = now_ms();
+
     check(cuvsHnswIndexCreate(&r.hnsw));
     check(cuvsHnswIndexParamsCreate(&r.hp));
-    r.hp->hierarchy = CPU; // GPU builds base graph; CPU constructs only sparse upper levels.
-    r.hp->ef_construction = head[4];
-    r.hp->num_threads = 16;
+    r.hp->hierarchy = CPU; // GPU builds the base graph; CPU constructs only the sparse upper levels.
+    r.hp->ef_construction = static_cast<int>(head[4]);
+    r.hp->num_threads = env_int("HIPVS_HNSW_THREADS", 16);
     check(cuvsHnswFromCagra(r.res, r.hp, r.graph, r.hnsw));
     check(cuvsHnswSerialize(r.res, argv[2], r.hnsw));
-    // Native hnswlib format on x86_64: six uint64, int32 level, uint32 entry,
-    // three uint64 degrees, double multiplier, uint64 ef => 96-byte header.
-    std::fstream output(argv[2], std::ios::binary | std::ios::in | std::ios::out);
-    uint64_t h[6]{};
-    output.read(reinterpret_cast<char *>(h), sizeof(h));
-    if (!output || h[2] != n || h[3] != 2*m*4+4+dim*4+8 ||
-        h[4] != 2*m*4+4+dim*4 || h[5] != 2*m*4+4) {
+    const double serialize_done = now_ms();
+
+    // Native hnswlib format on x86_64: 96-byte header, then fixed-size records
+    // [links(2*M*4)][level(4)][vector(dim*4)][label(8)].
+    const hipvs_layout::Layout layout = hipvs_layout::read_layout(argv[2]);
+    if (layout.n != n || layout.row_size != 2 * m * 4 + 4 + dim * 4 + 8 ||
+        layout.label_offset != 2 * m * 4 + 4 + dim * 4 ||
+        layout.data_offset != 2 * m * 4 + 4) {
       throw std::runtime_error("unsupported HNSW serialization layout");
     }
-    std::vector<bool> seen(n, false);
-    for (uint64_t row = 0; row < n; ++row) {
-      const uint64_t offset = 96 + row * h[3] + h[4];
-      uint64_t label = n;
-      output.seekg(offset);
-      output.read(reinterpret_cast<char *>(&label), sizeof(label));
-      if (!output || label >= n || seen[label]) throw std::runtime_error("invalid GPU label mapping");
-      seen[label] = true;
-      output.seekp(offset);
-      output.write(reinterpret_cast<const char *>(&ids[label]), sizeof(int64_t));
-      if (!output) throw std::runtime_error("VID rewrite failed");
-    }
-    output.close();
-    if (!output) throw std::runtime_error("output flush failed");
-    const double seconds = std::chrono::duration<double>(std::chrono::steady_clock::now()-start).count();
+    hipvs_layout::rewrite_labels(argv[2], layout, ids);
+    const double rewrite_done = now_ms();
+
+    const double seconds = (rewrite_done - process_start) / 1000.0;
     std::cerr << "HIPVS_GPU_BUILD_SUCCESS device=" << prop.gcnArchName << " rows=" << n
-              << " dim=" << dim << " seconds=" << seconds << " fallback=false\n";
-    return 0;
+              << " dim=" << dim << " seconds=" << seconds
+              << " init_ms=" << (init_done - process_start)
+              << " wait_ms=" << wait_ms
+              << " load_ms=" << (load_done - load_begin)
+              << " cagra_ms=" << (cagra_done - cagra_begin)
+              << " convert_ms=" << (serialize_done - cagra_done)
+              << " rewrite_ms=" << (rewrite_done - serialize_done)
+              << " fallback=false\n";
+    // The graph file is already synced and closed. Skipping cuVS/hnswlib
+    // teardown keeps destructor work out of the measured build.
+    std::cerr.flush();
+    std::_Exit(0);
   } catch (const std::exception &e) {
     std::cerr << "HIPVS_GPU_BUILD_FAILED fallback=false error=" << e.what() << '\n';
     return 1;

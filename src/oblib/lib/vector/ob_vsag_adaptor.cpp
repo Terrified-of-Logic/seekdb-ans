@@ -176,9 +176,7 @@ public:
   {
     // Deserialized snapshots already contain a native graph; never stage a rebuild.
     index_ = hnsw;
-    hipvs_snapshot_.enabled = false;
-    std::vector<float>().swap(hipvs_snapshot_.vectors);
-    std::vector<int64_t>().swap(hipvs_snapshot_.ids);
+    hipvs_snapshot_.reset();
   }
   vsag::Allocator *get_allocator() const { return allocator_; }
   inline bool get_use_static() const { return use_static_; }
@@ -1111,6 +1109,9 @@ int enable_hipvs_snapshot(VectorIndexPtr index_handler)
         strcmp(hnsw->get_dtype(), "float32") == 0 && strcmp(hnsw->get_metric(), "l2") == 0) {
       if (helper[0] != '/' || access(helper, X_OK) != 0) { return OB_INVALID_ARGUMENT; }
       hnsw->hipvs_snapshot_.enabled = true;
+      // Remember M/ef so the first staged batch can start the helper early.
+      hnsw->hipvs_snapshot_.configure(hnsw->get_dim(), hnsw->get_max_degree(),
+                                      hnsw->get_ef_construction());
     }
   }
 #endif
