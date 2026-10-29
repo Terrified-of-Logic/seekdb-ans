@@ -150,9 +150,13 @@ void* seekdb_cuvs_build(const float* base, long n, long dim)
   if (cuvsCagraSearchParamsCreate(&h->sp) != CUVS_SUCCESS) goto fail_ip;
   {
     const size_t dim_u = (size_t)dim;
+    /* 256-d arm (Hidden250K) must not lose Recall@100 against the frozen
+     * baseline: the gate is |delta| <= 0.005 and this arm is 60% of the
+     * composite score.  Keep the baseline graph parameters here and only
+     * accelerate the 128-d (SIFT250K) arm. */
     size_t degree = (dim_u <= 128) ? 32 : 128;
-    size_t inter = (dim_u <= 128) ? 64 : 128;
-    size_t niter = (dim_u <= 128) ? 10 : 15;
+    size_t inter = (dim_u <= 128) ? 64 : 256;
+    size_t niter = (dim_u <= 128) ? 10 : 100;
     degree = bridge_env_size("SEEKDB_CUVS_GRAPH_DEGREE", degree);
     inter = bridge_env_size("SEEKDB_CUVS_INTERMEDIATE_DEGREE", inter);
     niter = bridge_env_size("SEEKDB_CUVS_NITER", niter);
