@@ -4,6 +4,11 @@
 > 素材全部来自 GitHub 公开仓库，已抓原文放在本目录 `risk/` 下。
 > 一句话：**两份外部暴露物最有价值的信息是"评测口径 + 门槛检测方式 + 编译环境坑"**；
 > 其中一条明确指向我们当前提交的最大风险——**降 Recall 换构建速度的路线，强队已经主动放弃，改成 lossless 优化**。
+>
+> ⚠️ **重要更正（2026-10-29）**：官方语雀 AMD 题面已于 **2026-10-28 23:44 CST** 更新，**唯一有效基线改为 V5**
+> （并给出两数据集、明确 Recall 阈值、3.0x 构建满分线、nq=4096 查询口径、固定编译命令、failMsg 表）。
+> 本文第 2 节（依据外部 harness 和旧版文档）里"官方基线可能是 v1 / 2.0x 满分线 / batch 查询"等说法**已过时**，
+> 以文末 **第 7 节「官方题面 V5 更正」** 为准。
 
 ---
 
@@ -128,3 +133,78 @@ risk/
 
 > 注意：这些都是**其他队的实现与本地测量口径**，不是官方评分器；官方正式成绩仍以组织方云端评测为准。
 > 参考思路可以，但 AMD 题面要求"实验结果必须来自自己的实现和运行记录"，不要直接照抄代码进提交。
+
+---
+
+## 7. 官方题面 V5 更正（2026-10-29 抓取，content_updated_at=2026-10-28T15:44:11Z = 23:44 CST）
+
+> 原文已存 \official-AMD-doc-20261029.md\。以下是与本文前面（基于旧版文档/外部 harness）结论不同的官方口径，**以本节为准**。
+
+### 7.1 基线唯一有效版本 = V5
+
+- 分支 \md-oceanbase-official-contest-base-v5\，Tag \md-cagra-contest-baseline-v5\，冻结 commit \634888d9b037153fa143d2c913ba4b25503e1d62\。
+- "参赛代码必须基于该 commit 开发"；**不是 V5 后代的提交会在评测开始前被拒绝（failMsg = 8）**；基于 V1–V4 的代码必须先合入/变基到 V5。
+- V5 修复的关键点：在"先导入数据、再 CREATE VECTOR INDEX ... lib=cuvs"的**离线 DDL 路径上真正在 GPU 上构建 CAGRA**（V1–V4 实际构建的是 CPU VSAG HNSW、GPU 空闲）；构建后把 CAGRA 图+ID+原始向量持久化为 GPU 快照，查询时重载；基线本身在正式数据集上满足所有 Recall 门槛。
+- 官方参考成绩（V5 基线在正式评测环境 AMD Radeon PRO W7900D / ROCm 7.2.4 / 24 核 CPU 槽上 10 次）：
+  | 数据集 | 构建时间（含首查） | Recall@10/@100 | nq=4096 QPS（Top-10/Top-100） |
+  |---|---|---|---|
+  | SIFT250K | 20–27 s（中位约 23 s） | 约 1.000 / 1.000 | 约 147 / 143 |
+  | Hidden250K | 29–35 s（中位约 30 s） | 约 0.985 / 0.914 | 约 87 / 85 |
+
+### 7.2 数据集与评测口径（此前对外部 harness 的推断需要修正）
+
+- 正式计分用两个 **250K** 数据集：**SIFT250K = 250K×128（权重 40%）**、**Hidden250K = 250K×256（权重 60%）**；FP32 + L2；Hidden250K 内容/顺序/ID 不公开。
+- 计时起点 SQL 固定为：\CREATE VECTOR INDEX idx_items ON items(v) WITH (distance=l2, type=hnsw, lib=cuvs, m=16, ef_construction=200, ef_search=64)\；**终点包含第一条固定查询**。
+- 每个数据集 baseline/candidate **各跑 1 次、共 2 轮**，两个数据集交换先后顺序（A: baseline→candidate；B: candidate→baseline）；每轮清索引和缓存；异常配对作废重跑。
+- **查询是 nq=4096 条单行近似查询 SQL（Top-10/Top-100 两组），不是 \dbms_vector.batch_knn\ 批量接口**；nq=1 只做诊断。→ 本文第 2.4 节"批量查询口径风险"作废，队友测的"4096 条单行 SQL"正是官方口径。
+- 硬门槛（任一失败 = 0）明确为：
+  1. 可编译、通过 GPU 路径抽检、在资源/时间限制内完成；
+  2. 结果正确：每条查询必须返回 k 个**互不重复**的 ID（result_integrity）；
+  3. 检索质量：**SIFT250K Recall@10/100 ≥ 0.95**；**Hidden250K Recall@10 ≥ 0.90、Recall@100 ≥ 0.85**；且各项比同轮冻结基线下降 **≤ 0.005**；
+  4. 建图和查询都必须真实由 GPU hipVS/cuVS CAGRA 完成（外部 profiler 抽检，gpu_path）；
+  5. lib=vsag CPU 路径仍可用；查询吞吐 ≥ 同轮基线 90%（nq=4096 Top-10/Top-100 几何平均）；
+  6. 资源：显存峰值 ≤ 基线 1.25 倍；CPU 24 核 / 内存 96 GB / 显存 45 GB / GPU 阶段 15 分钟。
+- 计分（**不是本文第 2.2 节的 2.0x 线性口径**）：
+  \\\
+  综合构建加速比 = SIFT250K^0.4 × Hidden250K^0.6   （加权几何平均）
+  构建性能分 = 14 × clamp( ln(综合构建加速比) / ln(3.0), 0, 1 )    ← 3.0x 满分
+  查询性能分 =  2 × clamp( ln(综合查询加速比) / ln(1.5), 0, 1 )    ← 1.5x 满分
+  总分 = 4（硬门槛全过）+ 构建性能分 + 查询性能分；任一硬门槛挂 = 0
+  \\\
+  对数增长：1.2x≈2.3 分、1.5x≈5.2 分、2.0x≈8.8 分、3.0x 及以上 = 14 分；基线不改只拿 4 分。
+
+### 7.3 编译/提测要求（新增，直接决定能不能开始评测）
+
+- 固定编译环境：ROCm 7.2.4、GCC 13.3、CMake 3.31、Rust 1.97；hipVS 固定 commit **\96a663d0a4441d6f5344bd3ef552b71ae7b370b\**（只读 /opt/hipvs）；**编译环境不联网**，3rd 依赖/ Rust vendor 均为冻结版本，不能新增需联网依赖。
+- 固定编译命令（不能追加/改编译选项；可改仓库内 CMake 与 \	ools/hipvs_bridge/build.sh\，但必须能用该命令编出 seekdb + bridge）：
+  \\\ash
+  HIPVS_ROOT=/opt/hipvs ROCM_ROOT=/opt/rocm \\
+    tools/hipvs_bridge/build.sh <outdir>/libseekdb_cuvs_bridge.so
+  cmake -S . -B build_release -G "Unix Makefiles" \\
+    -DCMAKE_BUILD_TYPE=RelWithDebInfo -DOB_ENABLE_UNITY=ON -DOB_USE_LLD=ON \\
+    -DOB_BUILD_CUVS=ON -DOB_BUILD_CUVS_TRACE=OFF \\
+    -DCUVS_BRIDGE_LIB=<outdir>/libseekdb_cuvs_bridge.so
+  cmake --build build_release --target seekdb
+  \\\
+- **答题仓库地址必须是 \https://<用户名>:<只读令牌>@github.com/<所有者>/<仓库>\**，否则直接 failMsg=4；答题仓库保持私有；令牌 fine-grained、Contents: Read-only、有效期覆盖赛程。
+- failMsg 对照：1 分支不存在 / 2 commit 不存在 / 3 编译失败或未通过 GPU 路径抽检 / 4 clone 失败（地址格式/令牌） / 5 clone 超时 / 6 检出失败 / 7 CMake 失败 / 8 验证失败（如非 V5 后代）。
+
+### 7.4 对本文前面风险结论的修正（以官方 V5 口径重排）
+
+| 之前判断 | 更正后 |
+|---|---|
+| "官方基线可能是 v1，要按 v1 重跑 A/B" | **作废**。官方唯一基线 = V5；外部 dying 的 harness 用 v1 是旧口径。A/B 应按 **V5 基线**（参考构建 20–27s / 29–35s） |
+| "批量查询接口 batch_knn 是风险" | **作废**。官方查询 = nq=4096 条单行 SQL；队友的"4096 single-row SQL 1.58x QPS"正是官方口径 |
+| "构建 2.0x 满分" | **作废**。官方 **3.0x** 满分、对数计分（2.0x 只有 8.8 分） |
+| "提交 e7221f8b 的结构/基线风险" | **已消除**：它基于 V5 冻结 commit（其后代），当前 pending 记录已带 tokenized URL |
+| 首次失败 failMsg=4 | **真实原因**：当时答题仓库地址是普通 HTTPS 链接，不是带只读令牌的格式 → clone 失败（不是基线/ancestry 问题） |
+| 队友 dim 分档（≤128 / >128） | **正好对上官方两数据集**：SIFT250K=128 维（40%）、Hidden250K=256 维（60%） |
+| 最大 0 分风险 | 仍是 **Hidden250K（256 维、60% 权重）的 Recall 门槛**：基线 R@10/100 ≈0.985/0.914，候选需 ≥0.90/0.85 且比基线降 ≤0.005；队友只有 256d 代理数据（nytimes）验证，官方 Hidden250K 不公开 |
+| | 新增独立风险：**固定编译命令 + hipVS f96a663d 编译兼容**（队友 bridge 新增 \num cuvsCagraSearchAlgo/AUTO\ 写法）+ **GPU profiler 抽检**（建图和查询都必须在 GPU 完成） |
+
+**修正后的建议**：
+1. 其它先不动（当前 pending 那条就是基于 V5 + token URL，结构上已符合官方要求），等判分；
+2. 判回后按官方参考值核算：构建综合加速 = SIFT^0.4 × Hidden^0.6，目标 3.0x 拿满 14；Hidden250K（256d、60%）是关键短板；
+3. 若判 0/低分：优先核查 Hidden250K Recall 门槛与 GPU 抽检；必要时把 256d 的 niter/degree 回退到基线附近、把加速让给 lossless 优化；
+4. 编译兼容：在官方同版本 hipVS（f96a663d/ROCm 7.2.4）按固定命令完整编译一次，确认 bridge 无警告/错误；
+5. 注意"禁止行为"：不得通过降低 Recall 换性能（Recall 门槛已明确）、不得对评测不同阶段用不同实现路径、不得复用 CAGRA 图/缓存。
