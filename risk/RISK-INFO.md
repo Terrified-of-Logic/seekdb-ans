@@ -206,7 +206,7 @@ cmake --build build_release --target seekdb
 | 首次失败 failMsg=4 | **真实原因**：当时答题仓库地址是普通 HTTPS 链接，不是带只读令牌的格式 → clone 失败（不是基线/ancestry 问题） |
 | 队友 dim 分档（≤128 / >128） | **正好对上官方两数据集**：SIFT250K=128 维（40%）、Hidden250K=256 维（60%） |
 | 最大 0 分风险 | 仍是 **Hidden250K（256 维、60% 权重）的 Recall 门槛**：基线 R@10/100 ≈0.985/0.914，候选需 ≥0.90/0.85 且比基线降 ≤0.005；队友只有 256d 代理数据（nytimes）验证，官方 Hidden250K 不公开 |
-| "改 bridge 有编译风险" | **表述需修正**：改 bridge 本身是官方允许且预期的路径（见 7.5）；真正要确认的只是"新增的 cuVS C API 写法与固定 hipVS 版本 f96a663d 兼容"。我们提交的 e7221f8b 里唯一的新 API 是 `enum cuvsCagraSearchAlgo` + `sp.algo`，其余（`cuvsCagraSearchParamsCreate` / `itopk_size` / `search_width` / `build_algo`）都是基线 v5 已用 API；且队友在官方同款 AMD 实例上编译并实测过 t33/t43 → 风险低。另需注意 GPU profiler 抽检（建图和查询都必须在 GPU 完成） |
+| "改 bridge 有编译风险" | **已关闭**（2026-10-29）：改 bridge 本身是官方允许且预期的路径（见 7.5）；**队友已保证 AMD 开发机与评测机同版本**；并且我已在官方固定 hipVS commit `f96a663d` 的源码里核对：提交代码用到的 `enum cuvsCagraSearchAlgo`（含 `AUTO/MULTI_CTA/SINGLE_CTA/MULTI_KERNEL`）、`struct cuvsCagraSearchParams` 的 `algo`/`itopk_size`/`search_width` 字段、`cuvsCagraSearchParamsCreate` 全部存在（见 7.7 指纹）。→ 同版本成立时编译必过；剩下的只是 GPU profiler 抽检（建图和查询都必须在 GPU 完成） |
 
 ### 7.5 补充说明：为什么"改 bridge"不是风险
 
@@ -225,6 +225,30 @@ cmake --build build_release --target seekdb
 - 需要遵守的约束只有：不提交预编译 `.so`（要由评测按固定命令从源码编译）、不新增需要联网的依赖、固定命令必须能编过；
 - 我们提交的 `e7221f8b` 只改了 `seekdb_cuvs_bridge.c`（没有提交 .so、没改 build.sh/CMake、没加依赖）；
 - 唯一"新增 API"是 `enum cuvsCagraSearchAlgo` + `sp.algo = AUTO`（基线 v5 bridge 没用过；其余 `cuvsCagraSearchParamsCreate` / `itopk_size` / `search_width` / `build_algo` 都是基线已用 API）。队友在 AMD 实例上编译并用 t33/t43 实测过这条路径，实例就是 Radeon Cloud 的官方 contest image（/opt/hipvs、ROCm 7.2.4）→ 兼容性风险低；花 5 分钟用官方固定命令在评测镜像上重编一次即可完全排除。
+
+### 7.7 同版本核对（队友已保证；这里留可 1 分钟复核的指纹）
+
+官方固定 hipVS = **`AMD-Ecosystem/hipVS`**，commit **`f96a663d0a4441d6f5344bd3ef552b71ae7b370b`**（分支 `release/rocmds-26.03`，`VERSION` = `01.00.00`）。
+
+该 commit 下相关文件的 sha256（官方原文，可直接拿来和实例比对）：
+
+| 文件（官方 commit 内路径） | sha256 |
+|---|---|
+| `cpp/include/cuvs/neighbors/cagra.h` | `4fbca2261378ce270dae35ec5aa5675b317fb4374f0e426c3965f75ba9f4d29f` |
+| `cpp/include/cuvs/core/c_api.h` | `fd90189f0421d1613e3384d98ae1cb72acc1971c5ea7e7291803b5dcb06ca36e` |
+| `VERSION` | `7dbab6846339a827bbed57015ee889a6179f1987fcfe0d977a8db844f160e9df` |
+
+在 AMD 实例上一行命令核对（期望输出与上表一致）：
+
+```bash
+sha256sum /opt/hipvs/include/cuvs/neighbors/cagra.h           /opt/hipvs/include/cuvs/core/c_api.h           /opt/hipvs/VERSION
+cat /opt/hipvs/VERSION            # 期望 01.00.00
+hipcc --version | head -2         # 期望 ROCm 7.2.4（官方固定）
+rocminfo | grep -m1 gfx           # 期望 gfx1100（官方评测机 Radeon PRO W7900D 也是 gfx1100）
+```
+
+上述一致 + 队友保证的"开发机=评测机"→ 编译环境等价，**编译兼容风险关闭**。
+（官方题面对比：hipVS 固定 commit 只读、不能替换；ROCm 7.2.4 / GCC 13.3 / CMake 3.31 / Rust 1.97；编译不联网。）
 
 ### 7.6 修正后的建议
 
