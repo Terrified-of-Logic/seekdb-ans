@@ -38,9 +38,11 @@ typedef struct {
  * (nytimes-250K, exact top-100 truth): degree=128 is required there
  * (degree=64 moves strict recall by +0.047), and 128/128/20 costs 4.5 s
  * (4.17x) with strict Recall@100 delta +2e-5 and tolerance delta 0.
- * Wider vectors therefore ship 128/128/20; the conservative 128/128/80
- * stays one env override away (SEEKDB_CUVS_NITER=80) if official Hidden250K
- * data disagrees.
+ * Wider vectors therefore ship 128/128/15: t43's SQL-level 256-d sweep
+ * measured build 12.0 -> 9.2 s, SQL QPS +3.6% and tolerance-recall delta
+ * +8e-4 vs 128/128/20 (the batch-QPS difference t25 reported is a different
+ * metric, not used here).  The conservative 128/128/80 stays one env
+ * override away (SEEKDB_CUVS_NITER=80) if official Hidden250K data disagrees.
  *
  * The environment overrides exist for experiments only; the grader never
  * sets them, so the defaults below are what ships. */
@@ -144,7 +146,7 @@ void* seekdb_cuvs_build(const float* base, long n, long dim)
     const size_t dim_u = (size_t)dim;
     size_t degree = (dim_u <= 128) ? 32 : 128;
     size_t inter = (dim_u <= 128) ? 64 : 128;
-    size_t niter = (dim_u <= 128) ? 10 : 20;
+    size_t niter = (dim_u <= 128) ? 10 : 15;
     degree = bridge_env_size("SEEKDB_CUVS_GRAPH_DEGREE", degree);
     inter = bridge_env_size("SEEKDB_CUVS_INTERMEDIATE_DEGREE", inter);
     niter = bridge_env_size("SEEKDB_CUVS_NITER", niter);
