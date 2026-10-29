@@ -138,73 +138,98 @@ risk/
 
 ## 7. 官方题面 V5 更正（2026-10-29 抓取，content_updated_at=2026-10-28T15:44:11Z = 23:44 CST）
 
-> 原文已存 \official-AMD-doc-20261029.md\。以下是与本文前面（基于旧版文档/外部 harness）结论不同的官方口径，**以本节为准**。
+> 原文已存 `official-AMD-doc-20261029.md`。本节是官方最新口径，**与本文前面基于旧版文档/外部 harness 的推断冲突时，以本节为准**。
 
 ### 7.1 基线唯一有效版本 = V5
 
-- 分支 \md-oceanbase-official-contest-base-v5\，Tag \md-cagra-contest-baseline-v5\，冻结 commit \634888d9b037153fa143d2c913ba4b25503e1d62\。
+- 分支 `amd-oceanbase-official-contest-base-v5`，Tag `amd-cagra-contest-baseline-v5`，冻结 commit `634888d9b037153fa143d2c913ba4b25503e1d62`。
 - "参赛代码必须基于该 commit 开发"；**不是 V5 后代的提交会在评测开始前被拒绝（failMsg = 8）**；基于 V1–V4 的代码必须先合入/变基到 V5。
-- V5 修复的关键点：在"先导入数据、再 CREATE VECTOR INDEX ... lib=cuvs"的**离线 DDL 路径上真正在 GPU 上构建 CAGRA**（V1–V4 实际构建的是 CPU VSAG HNSW、GPU 空闲）；构建后把 CAGRA 图+ID+原始向量持久化为 GPU 快照，查询时重载；基线本身在正式数据集上满足所有 Recall 门槛。
+- V5 修复的关键点：在"先导入数据、再 `CREATE VECTOR INDEX ... lib=cuvs`"的**离线 DDL 路径上真正在 GPU 上构建 CAGRA**（V1–V4 实际构建的是 CPU VSAG HNSW、GPU 空闲）；构建后把 CAGRA 图 + ID + 原始向量持久化为 GPU 快照，查询时重载；基线本身在正式数据集上满足所有 Recall 门槛。
 - 官方参考成绩（V5 基线在正式评测环境 AMD Radeon PRO W7900D / ROCm 7.2.4 / 24 核 CPU 槽上 10 次）：
-  | 数据集 | 构建时间（含首查） | Recall@10/@100 | nq=4096 QPS（Top-10/Top-100） |
-  |---|---|---|---|
-  | SIFT250K | 20–27 s（中位约 23 s） | 约 1.000 / 1.000 | 约 147 / 143 |
-  | Hidden250K | 29–35 s（中位约 30 s） | 约 0.985 / 0.914 | 约 87 / 85 |
 
-### 7.2 数据集与评测口径（此前对外部 harness 的推断需要修正）
+| 数据集 | 构建时间（含首查） | Recall@10/@100 | nq=4096 QPS（Top-10 / Top-100） |
+|---|---|---|---|
+| SIFT250K | 20–27 s（中位约 23 s） | 约 1.000 / 1.000 | 约 147 / 143 |
+| Hidden250K | 29–35 s（中位约 30 s） | 约 0.985 / 0.914 | 约 87 / 85 |
+
+### 7.2 数据集、计时与查询口径
 
 - 正式计分用两个 **250K** 数据集：**SIFT250K = 250K×128（权重 40%）**、**Hidden250K = 250K×256（权重 60%）**；FP32 + L2；Hidden250K 内容/顺序/ID 不公开。
-- 计时起点 SQL 固定为：\CREATE VECTOR INDEX idx_items ON items(v) WITH (distance=l2, type=hnsw, lib=cuvs, m=16, ef_construction=200, ef_search=64)\；**终点包含第一条固定查询**。
+- 计时起点 SQL 固定：`CREATE VECTOR INDEX idx_items ON items(v) WITH (distance=l2, type=hnsw, lib=cuvs, m=16, ef_construction=200, ef_search=64)`；**终点包含第一条固定查询**（防止把惰性建图移出计时）。
 - 每个数据集 baseline/candidate **各跑 1 次、共 2 轮**，两个数据集交换先后顺序（A: baseline→candidate；B: candidate→baseline）；每轮清索引和缓存；异常配对作废重跑。
-- **查询是 nq=4096 条单行近似查询 SQL（Top-10/Top-100 两组），不是 \dbms_vector.batch_knn\ 批量接口**；nq=1 只做诊断。→ 本文第 2.4 节"批量查询口径风险"作废，队友测的"4096 条单行 SQL"正是官方口径。
-- 硬门槛（任一失败 = 0）明确为：
+- **查询是 nq=4096 条单行近似查询 SQL（Top-10 / Top-100 两组），不是 `dbms_vector.batch_knn` 批量接口**；nq=1 只做诊断。→ 本文第 2.4 节"批量查询口径风险"作废；队友的"4096 single-row SQL 1.58x QPS"正是官方口径。
+- 硬门槛（任一失败 = 0）：
   1. 可编译、通过 GPU 路径抽检、在资源/时间限制内完成；
   2. 结果正确：每条查询必须返回 k 个**互不重复**的 ID（result_integrity）；
   3. 检索质量：**SIFT250K Recall@10/100 ≥ 0.95**；**Hidden250K Recall@10 ≥ 0.90、Recall@100 ≥ 0.85**；且各项比同轮冻结基线下降 **≤ 0.005**；
   4. 建图和查询都必须真实由 GPU hipVS/cuVS CAGRA 完成（外部 profiler 抽检，gpu_path）；
-  5. lib=vsag CPU 路径仍可用；查询吞吐 ≥ 同轮基线 90%（nq=4096 Top-10/Top-100 几何平均）；
+  5. `lib=vsag` CPU 路径仍可用；查询吞吐 ≥ 同轮基线 90%（nq=4096 Top-10/Top-100 几何平均）；
   6. 资源：显存峰值 ≤ 基线 1.25 倍；CPU 24 核 / 内存 96 GB / 显存 45 GB / GPU 阶段 15 分钟。
 - 计分（**不是本文第 2.2 节的 2.0x 线性口径**）：
-  \\\
-  综合构建加速比 = SIFT250K^0.4 × Hidden250K^0.6   （加权几何平均）
-  构建性能分 = 14 × clamp( ln(综合构建加速比) / ln(3.0), 0, 1 )    ← 3.0x 满分
-  查询性能分 =  2 × clamp( ln(综合查询加速比) / ln(1.5), 0, 1 )    ← 1.5x 满分
-  总分 = 4（硬门槛全过）+ 构建性能分 + 查询性能分；任一硬门槛挂 = 0
-  \\\
-  对数增长：1.2x≈2.3 分、1.5x≈5.2 分、2.0x≈8.8 分、3.0x 及以上 = 14 分；基线不改只拿 4 分。
+
+```
+综合构建加速比 = SIFT250K^0.4 × Hidden250K^0.6   （加权几何平均）
+构建性能分 = 14 × clamp( ln(综合构建加速比) / ln(3.0), 0, 1 )    ← 3.0x 满分
+查询性能分 =  2 × clamp( ln(综合查询加速比) / ln(1.5), 0, 1 )    ← 1.5x 满分
+总分 = 4（硬门槛全过）+ 构建性能分 + 查询性能分；任一硬门槛挂 = 0
+```
+
+对数增长：1.2x≈2.3 分、1.5x≈5.2 分、2.0x≈8.8 分、3.0x 及以上 = 14 分；直接提交未修改的基线只拿 4 分。
 
 ### 7.3 编译/提测要求（新增，直接决定能不能开始评测）
 
-- 固定编译环境：ROCm 7.2.4、GCC 13.3、CMake 3.31、Rust 1.97；hipVS 固定 commit **\96a663d0a4441d6f5344bd3ef552b71ae7b370b\**（只读 /opt/hipvs）；**编译环境不联网**，3rd 依赖/ Rust vendor 均为冻结版本，不能新增需联网依赖。
-- 固定编译命令（不能追加/改编译选项；可改仓库内 CMake 与 \	ools/hipvs_bridge/build.sh\，但必须能用该命令编出 seekdb + bridge）：
-  \\\ash
-  HIPVS_ROOT=/opt/hipvs ROCM_ROOT=/opt/rocm \\
-    tools/hipvs_bridge/build.sh <outdir>/libseekdb_cuvs_bridge.so
-  cmake -S . -B build_release -G "Unix Makefiles" \\
-    -DCMAKE_BUILD_TYPE=RelWithDebInfo -DOB_ENABLE_UNITY=ON -DOB_USE_LLD=ON \\
-    -DOB_BUILD_CUVS=ON -DOB_BUILD_CUVS_TRACE=OFF \\
-    -DCUVS_BRIDGE_LIB=<outdir>/libseekdb_cuvs_bridge.so
-  cmake --build build_release --target seekdb
-  \\\
-- **答题仓库地址必须是 \https://<用户名>:<只读令牌>@github.com/<所有者>/<仓库>\**，否则直接 failMsg=4；答题仓库保持私有；令牌 fine-grained、Contents: Read-only、有效期覆盖赛程。
+- 固定编译环境：ROCm 7.2.4、GCC 13.3、CMake 3.31、Rust 1.97；hipVS 固定 commit **`f96a663d0a4441d6f5344bd3ef552b71ae7b370b`**（只读 `/opt/hipvs`）；**编译环境不联网**，3rd 依赖 / Rust vendor 均为冻结版本，不能新增需联网下载的依赖。
+- 固定编译命令（不能追加/修改编译选项；但**可以改仓库内 CMake 文件和 `tools/hipvs_bridge/build.sh`**，只要最终能用该命令编出 seekdb + bridge）：
+
+```bash
+HIPVS_ROOT=/opt/hipvs ROCM_ROOT=/opt/rocm \
+  tools/hipvs_bridge/build.sh <outdir>/libseekdb_cuvs_bridge.so
+
+cmake -S . -B build_release -G "Unix Makefiles" \
+  -DCMAKE_BUILD_TYPE=RelWithDebInfo -DOB_ENABLE_UNITY=ON -DOB_USE_LLD=ON \
+  -DOB_BUILD_CUVS=ON -DOB_BUILD_CUVS_TRACE=OFF \
+  -DCUVS_BRIDGE_LIB=<outdir>/libseekdb_cuvs_bridge.so
+cmake --build build_release --target seekdb
+```
+
+- **答题仓库地址必须是 `https://<用户名>:<只读令牌>@github.com/<所有者>/<仓库>`**，否则直接 failMsg=4；答题仓库保持私有；令牌 Fine-grained、只给 `Contents: Read-only`、有效期覆盖赛程。
 - failMsg 对照：1 分支不存在 / 2 commit 不存在 / 3 编译失败或未通过 GPU 路径抽检 / 4 clone 失败（地址格式/令牌） / 5 clone 超时 / 6 检出失败 / 7 CMake 失败 / 8 验证失败（如非 V5 后代）。
 
 ### 7.4 对本文前面风险结论的修正（以官方 V5 口径重排）
 
 | 之前判断 | 更正后 |
 |---|---|
-| "官方基线可能是 v1，要按 v1 重跑 A/B" | **作废**。官方唯一基线 = V5；外部 dying 的 harness 用 v1 是旧口径。A/B 应按 **V5 基线**（参考构建 20–27s / 29–35s） |
+| "官方基线可能是 v1，要按 v1 重跑 A/B" | **作废**。官方唯一基线 = V5；外部 dying 的 harness 用 v1 是旧口径。A/B 应按 **V5 基线**（参考构建 20–27 s / 29–35 s） |
 | "批量查询接口 batch_knn 是风险" | **作废**。官方查询 = nq=4096 条单行 SQL；队友的"4096 single-row SQL 1.58x QPS"正是官方口径 |
 | "构建 2.0x 满分" | **作废**。官方 **3.0x** 满分、对数计分（2.0x 只有 8.8 分） |
 | "提交 e7221f8b 的结构/基线风险" | **已消除**：它基于 V5 冻结 commit（其后代），当前 pending 记录已带 tokenized URL |
 | 首次失败 failMsg=4 | **真实原因**：当时答题仓库地址是普通 HTTPS 链接，不是带只读令牌的格式 → clone 失败（不是基线/ancestry 问题） |
 | 队友 dim 分档（≤128 / >128） | **正好对上官方两数据集**：SIFT250K=128 维（40%）、Hidden250K=256 维（60%） |
 | 最大 0 分风险 | 仍是 **Hidden250K（256 维、60% 权重）的 Recall 门槛**：基线 R@10/100 ≈0.985/0.914，候选需 ≥0.90/0.85 且比基线降 ≤0.005；队友只有 256d 代理数据（nytimes）验证，官方 Hidden250K 不公开 |
-| | 新增独立风险：**固定编译命令 + hipVS f96a663d 编译兼容**（队友 bridge 新增 \num cuvsCagraSearchAlgo/AUTO\ 写法）+ **GPU profiler 抽检**（建图和查询都必须在 GPU 完成） |
+| "改 bridge 有编译风险" | **表述需修正**：改 bridge 本身是官方允许且预期的路径（见 7.5）；真正要确认的只是"新增的 cuVS C API 写法与固定 hipVS 版本 f96a663d 兼容"。我们提交的 e7221f8b 里唯一的新 API 是 `enum cuvsCagraSearchAlgo` + `sp.algo`，其余（`cuvsCagraSearchParamsCreate` / `itopk_size` / `search_width` / `build_algo`）都是基线 v5 已用 API；且队友在官方同款 AMD 实例上编译并实测过 t33/t43 → 风险低。另需注意 GPU profiler 抽检（建图和查询都必须在 GPU 完成） |
 
-**修正后的建议**：
+### 7.5 补充说明：为什么"改 bridge"不是风险
+
+官方题面 3.1 原文：
+
+> **可以修改**：答题仓库（基于 V5 的 seekdb 仓库）中的全部源码，包括 seekdb 内核、CMake 文件，以及 `tools/hipvs_bridge/` 下的 hipVS bridge。
+> **不能修改**：hipVS/cuVS 库本身。评测时 hipVS 是组织方固定的版本（commit `f96a663d...`），以只读方式提供，选手无法替换；对 hipVS/cuVS 源码的修改不会进入评测。如果要改进 CAGRA 的建图或检索实现，相关代码必须放在答题仓库中，并在下文的统一编译流程里编译生成。
+
+3.2 原文：
+
+> 上述命令和参数固定，不能追加或修改编译选项；可以修改仓库内的 CMake 文件和 `tools/hipvs_bridge/build.sh`，但最终必须能用上述命令编译成功，并产出 `build_release/src/observer/seekdb` 和 bridge 动态库。
+
+所以：
+
+- **改 bridge 是这道题的标准/预期做法**（CAGRA 实现只能通过仓库内的 bridge 改，不能改 hipVS 库），本身零风险；
+- 需要遵守的约束只有：不提交预编译 `.so`（要由评测按固定命令从源码编译）、不新增需要联网的依赖、固定命令必须能编过；
+- 我们提交的 `e7221f8b` 只改了 `seekdb_cuvs_bridge.c`（没有提交 .so、没改 build.sh/CMake、没加依赖）；
+- 唯一"新增 API"是 `enum cuvsCagraSearchAlgo` + `sp.algo = AUTO`（基线 v5 bridge 没用过；其余 `cuvsCagraSearchParamsCreate` / `itopk_size` / `search_width` / `build_algo` 都是基线已用 API）。队友在 AMD 实例上编译并用 t33/t43 实测过这条路径，实例就是 Radeon Cloud 的官方 contest image（/opt/hipvs、ROCm 7.2.4）→ 兼容性风险低；花 5 分钟用官方固定命令在评测镜像上重编一次即可完全排除。
+
+### 7.6 修正后的建议
+
 1. 其它先不动（当前 pending 那条就是基于 V5 + token URL，结构上已符合官方要求），等判分；
 2. 判回后按官方参考值核算：构建综合加速 = SIFT^0.4 × Hidden^0.6，目标 3.0x 拿满 14；Hidden250K（256d、60%）是关键短板；
 3. 若判 0/低分：优先核查 Hidden250K Recall 门槛与 GPU 抽检；必要时把 256d 的 niter/degree 回退到基线附近、把加速让给 lossless 优化；
-4. 编译兼容：在官方同版本 hipVS（f96a663d/ROCm 7.2.4）按固定命令完整编译一次，确认 bridge 无警告/错误；
+4. 编译兼容：在官方同版本 hipVS（f96a663d / ROCm 7.2.4）按固定命令完整编译一次，确认 bridge 无错误；
 5. 注意"禁止行为"：不得通过降低 Recall 换性能（Recall 门槛已明确）、不得对评测不同阶段用不同实现路径、不得复用 CAGRA 图/缓存。
