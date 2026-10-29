@@ -202,3 +202,16 @@ tools/hipvs_bridge/build.sh /work/bridge/libseekdb_cuvs_bridge.so
 - `weiqdguewbfu/seekdb` 的 `contest-optim`（`c6e3d94724`）：抓取时账号已 404（转私有/删除），未抓到。
 - `JIANG2331/seekdb@amd-cagra-submit`、`disguiser501/seekdb`、`magicones/seekdb`：没有 AMD 改动。
 - 得分队 `idmg123`（AMD 20.000）：未找到公开仓库/账号。
+
+---
+
+## 7. 更新（2026-10-29）：外部仓库里的「风险信息」挖掘
+
+新抓到两队 10-29 的更新（dyingtolife 的官方口径 benchmark harness、wiqdguewbfu 的编译/环境 notes 与 lossless 实现），
+整理成 **\isk/RISK-INFO.md\**：
+- 官方口径硬门槛/计分公式/计时窗口（dying 的 harness 复现版：4+14*clamp(build/2.0)+2*clamp(qps/1.5)）
+- \gpu_build_in_window\ 检测方式、基线按冻结 v1 构建、1M/clustered 数据假设
+- hipVS 版本线索与编译兼容坑（f96a663d / rocmds-26.03、dlpack 匿名枚举、cuvsResources_t 整数句柄）
+- 强队从"降参数"转向"lossless 优化"的信号（对我们当前提交的 Recall 门槛风险提示）
+
+详见 \isk/RISK-INFO.md\（原文素材在 \isk/dyingtolife/\、\isk/wiqdguewbfu/\）。
