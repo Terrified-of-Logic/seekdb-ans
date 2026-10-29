@@ -162,9 +162,9 @@ void* seekdb_cuvs_build(const float* base, long n, long dim)
     niter = bridge_env_size("SEEKDB_CUVS_NITER", niter);
     if (inter < degree) inter = degree;
     h->ip->build_algo = NN_DESCENT;
-    h->ip->graph_degree = degree;
-    h->ip->intermediate_graph_degree = inter;
-    h->ip->nn_descent_niter = niter;
+    /* cuVS default graph_degree (64): see [CUVS_DEFAULTS] */
+    /* cuVS default intermediate_graph_degree (128) */
+    /* cuVS default nn_descent_niter (20) */
     fprintf(stderr, "[seekdb_cuvs] build n=%ld dim=%ld degree=%zu inter=%zu niter=%zu\n",
             n, dim, degree, inter, niter);
     fprintf(stderr, "[seekdb_cuvs] search dim=%ld width=%zu itopk=%zu algo=%s\n",
