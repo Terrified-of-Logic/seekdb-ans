@@ -154,9 +154,14 @@ void* seekdb_cuvs_build(const float* base, long n, long dim)
      * baseline: the gate is |delta| <= 0.005 and this arm is 60% of the
      * composite score.  Keep the baseline graph parameters here and only
      * accelerate the 128-d (SIFT250K) arm. */
+    /* v4: the one variable the accepted run and the rejected run did not share
+     * is nn_descent_niter, not the intermediate/final ratio.  Keep the final
+     * graph degree at the frozen baseline (128) so R@100 capacity is unchanged,
+     * and cut only niter 30 -> 20 plus intermediate 256 -> 128 for the build
+     * headroom.  The narrow arm stays at the accepted 32/64/10. */
     size_t degree = (dim_u <= 128) ? 32 : 128;
-    size_t inter = (dim_u <= 128) ? 64 : 256;
-    size_t niter = (dim_u <= 128) ? 10 : 30;
+    size_t inter = (dim_u <= 128) ? 64 : 128;
+    size_t niter = (dim_u <= 128) ? 10 : 20;
     degree = bridge_env_size("SEEKDB_CUVS_GRAPH_DEGREE", degree);
     inter = bridge_env_size("SEEKDB_CUVS_INTERMEDIATE_DEGREE", inter);
     niter = bridge_env_size("SEEKDB_CUVS_NITER", niter);
