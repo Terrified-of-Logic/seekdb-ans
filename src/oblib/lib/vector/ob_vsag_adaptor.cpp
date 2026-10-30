@@ -176,6 +176,24 @@ static void ob_cuvs_add(void *key, const float *vectors, const int64_t *ids,
   if (slot == nullptr) { slot = new ObCuvsEntry(); slot->dim_ = dim; }
   if (slot->dim_ == 0) { slot->dim_ = dim; }
   if (slot->dim_ != dim) { return; }
+  // Grow the build buffers geometrically instead of letting std::vector do it
+  // row by row.  The index DDL feeds vectors one row at a time (250K calls for
+  // 250K x 256), and each un-reserved insert can reallocate and copy the whole
+  // buffer.  Reserving up-front keeps the per-row cost to a memcpy.
+  {
+    const size_t vec_need = slot->buf_vecs_.size() + static_cast<size_t>(dim) * size;
+    if (vec_need > slot->buf_vecs_.capacity()) {
+      size_t cap = slot->buf_vecs_.capacity() == 0 ? (size_t)(1u << 20) : slot->buf_vecs_.capacity();
+      while (cap < vec_need) { cap *= 2; }
+      slot->buf_vecs_.reserve(cap);
+    }
+    const size_t id_need = slot->buf_ids_.size() + static_cast<size_t>(size);
+    if (id_need > slot->buf_ids_.capacity()) {
+      size_t cap = slot->buf_ids_.capacity() == 0 ? (size_t)(1u << 16) : slot->buf_ids_.capacity();
+      while (cap < id_need) { cap *= 2; }
+      slot->buf_ids_.reserve(cap);
+    }
+  }
   slot->buf_vecs_.insert(slot->buf_vecs_.end(), vectors,
                          vectors + static_cast<size_t>(dim) * size);
   slot->buf_ids_.insert(slot->buf_ids_.end(), ids, ids + size);
