@@ -154,9 +154,13 @@ void* seekdb_cuvs_build(const float* base, long n, long dim)
      * baseline: the gate is |delta| <= 0.005 and this arm is 60% of the
      * composite score.  Keep the baseline graph parameters here and only
      * accelerate the 128-d (SIFT250K) arm. */
-    size_t degree = (dim_u <= 128) ? 32 : 128;
-    size_t inter = (dim_u <= 128) ? 64 : 256;
-    size_t niter = (dim_u <= 128) ? 10 : 30;
+    /* v3: midpoint probe between the accepted 128/256/30 (S=2.42) and the
+     * aggressive 64/128/20.  Keep intermediate/final = 2.0 (the ratio that the
+     * 10-29 rejection proved is structural) and bisect degree 128 -> 96 so one
+     * submission can bracket the Hidden recall boundary. */
+    size_t degree = (dim_u <= 128) ? 32 : 96;
+    size_t inter = (dim_u <= 128) ? 64 : 192;
+    size_t niter = (dim_u <= 128) ? 10 : 20;
     degree = bridge_env_size("SEEKDB_CUVS_GRAPH_DEGREE", degree);
     inter = bridge_env_size("SEEKDB_CUVS_INTERMEDIATE_DEGREE", inter);
     niter = bridge_env_size("SEEKDB_CUVS_NITER", niter);
