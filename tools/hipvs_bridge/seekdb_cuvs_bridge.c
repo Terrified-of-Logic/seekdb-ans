@@ -155,8 +155,8 @@ void* seekdb_cuvs_build(const float* base, long n, long dim)
      * composite score.  Keep the baseline graph parameters here and only
      * accelerate the 128-d (SIFT250K) arm. */
     size_t degree = (dim_u <= 128) ? 32 : 128;
-    size_t inter = (dim_u <= 128) ? 64 : 256;
-    size_t niter = (dim_u <= 128) ? 10 : 30;
+    size_t inter = (dim_u <= 128) ? 64 : 128;
+    size_t niter = (dim_u <= 128) ? 10 : 20;
     degree = bridge_env_size("SEEKDB_CUVS_GRAPH_DEGREE", degree);
     inter = bridge_env_size("SEEKDB_CUVS_INTERMEDIATE_DEGREE", inter);
     niter = bridge_env_size("SEEKDB_CUVS_NITER", niter);
