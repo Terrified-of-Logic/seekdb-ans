@@ -2067,6 +2067,12 @@ int immutable_optimize(VectorIndexPtr& index_handler)
   if (OB_ISNULL(index_handler)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("[OBVSAG] null pointer addr", K(ret), KP(index_handler));
+  } else if (ob_cuvs_marked(index_handler)) {
+    // A lib=cuvs index never populates the VSAG shadow during the DDL: add_index
+    // returns right after ob_cuvs_add() while vsag_ready_ is false, so the VSAG
+    // HNSW this call would optimize is empty.  Running it only burns CPU inside
+    // the index-DDL timing window.  Plain lib=vsag indexes are unaffected - they
+    // are not marked, so they take the branch below exactly as before.
   } else {
     HnswIndexHandler *hnsw = static_cast<HnswIndexHandler *>(index_handler);
     if (OB_FAIL(hnsw->immutable_optimize())) {
