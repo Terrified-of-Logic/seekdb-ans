@@ -162,9 +162,9 @@ void* seekdb_cuvs_build(const float* base, long n, long dim)
      * the fixed DDL overhead dominates, so it is the only place left where
      * seconds convert into composite score.
      * Measured bridge build on 250K x 128: 32/64/10 = 4.67 s, 24/48/6 = 2.94 s. */
-    size_t degree = (dim_u <= 128) ? 24 : 128;
-    size_t inter = (dim_u <= 128) ? 48 : 256;
-    size_t niter = (dim_u <= 128) ? 6 : 30;
+    size_t degree = (dim_u <= 128) ? 16 : 128;
+    size_t inter = (dim_u <= 128) ? 32 : 256;
+    size_t niter = (dim_u <= 128) ? 5 : 30;
     degree = bridge_env_size("SEEKDB_CUVS_GRAPH_DEGREE", degree);
     inter = bridge_env_size("SEEKDB_CUVS_INTERMEDIATE_DEGREE", inter);
     niter = bridge_env_size("SEEKDB_CUVS_NITER", niter);
