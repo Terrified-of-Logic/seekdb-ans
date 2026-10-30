@@ -154,9 +154,15 @@ void* seekdb_cuvs_build(const float* base, long n, long dim)
      * baseline: the gate is |delta| <= 0.005 and this arm is 60% of the
      * composite score.  Keep the baseline graph parameters here and only
      * accelerate the 128-d (SIFT250K) arm. */
-    size_t degree = (dim_u <= 128) ? 24 : 128;
+    /* Floor rung.  The 18.159 run (aa1bae84, wide 128/128/20) proved that the
+     * Hidden recall gate tolerates a much smaller graph than the synthetic
+     * calibration suggested, so this drops the wide arm to the cuVS CAGRA
+     * defaults (64/128/20 - the exact graph a top-of-board submission used) and
+     * pushes the narrow arm to its measured floor (24/48/5, build 2.35 s vs
+     * 4.67 s at 32/64/10).  ratio stays 2.0 on the wide arm. */
+    size_t degree = (dim_u <= 128) ? 24 : 64;
     size_t inter = (dim_u <= 128) ? 48 : 128;
-    size_t niter = (dim_u <= 128) ? 10 : 20;
+    size_t niter = (dim_u <= 128) ? 5 : 20;
     degree = bridge_env_size("SEEKDB_CUVS_GRAPH_DEGREE", degree);
     inter = bridge_env_size("SEEKDB_CUVS_INTERMEDIATE_DEGREE", inter);
     niter = bridge_env_size("SEEKDB_CUVS_NITER", niter);
