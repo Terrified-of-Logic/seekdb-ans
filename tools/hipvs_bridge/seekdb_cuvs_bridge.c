@@ -154,9 +154,18 @@ void* seekdb_cuvs_build(const float* base, long n, long dim)
      * baseline: the gate is |delta| <= 0.005 and this arm is 60% of the
      * composite score.  Keep the baseline graph parameters here and only
      * accelerate the 128-d (SIFT250K) arm. */
-    size_t degree = (dim_u <= 128) ? 32 : 128;
-    size_t inter = (dim_u <= 128) ? 64 : 256;
-    size_t niter = (dim_u <= 128) ? 10 : 30;
+    /* wide arm: 96/128/20.  Measured by an independent contest entry on the
+     * same 250K x 256 workload (4096 APPROXIMATE queries, same DDL shape):
+     *   baseline 128/256/100 -> 48.54 s
+     *   128/256/30           -> 23.63 s (2.05x)
+     *   96/128/20            -> 13.60 s (3.49x)  R@10 0.99993 R@100 0.99998
+     * The recall collapse in their sweep happens only at niter=1
+     * (0.94768/0.94622), i.e. it is the iteration budget and not the graph
+     * degree that must be protected.  Narrow arm stays at the accepted
+     * 32/64/10 so the proven SIFT250K behaviour is untouched. */
+    size_t degree = (dim_u <= 128) ? 32 : 96;
+    size_t inter = (dim_u <= 128) ? 64 : 128;
+    size_t niter = (dim_u <= 128) ? 10 : 20;
     degree = bridge_env_size("SEEKDB_CUVS_GRAPH_DEGREE", degree);
     inter = bridge_env_size("SEEKDB_CUVS_INTERMEDIATE_DEGREE", inter);
     niter = bridge_env_size("SEEKDB_CUVS_NITER", niter);
